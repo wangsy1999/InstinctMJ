@@ -51,6 +51,36 @@ class EdgeCylinder(VirtualObstacleBase):
         self.cfg: EdgeCylinderCfg = cfg
         self.angle_threshold = cfg.angle_threshold
 
+    def _set_edge_cylinders(self, edge_end_points: np.ndarray, device="cpu") -> None:
+        """Finalize edge tensors and spatial grid from edge endpoints."""
+        self.device = device if isinstance(device, torch.device) else torch.device(device)
+        self.edges_pyt = torch.tensor(edge_end_points, dtype=torch.float32, device=self.device)
+        # create a cylinder spatial grid for the edges and for penetration offset computation
+        if edge_end_points.size > 0:
+            self.cylinders = CylinderSpatialGrid(
+                cylinders=np.concatenate(
+                    [
+                        edge_end_points,
+                        np.ones_like(edge_end_points[:, :1]) * self.cfg.cylinder_radius,
+                    ],
+                    axis=1,
+                ),
+                num_grid_cells=self.cfg.num_grid_cells,
+                device=self.device,
+            )
+        else:
+            self.cylinders = None
+
+    def generate_from_edge_segments(self, edge_segments: np.ndarray, device="cpu") -> None:
+        """Generate virtual obstacle from pre-extracted edge segments."""
+        if edge_segments.size == 0:
+            edge_end_points = np.empty((0, 6), dtype=np.float32)
+        else:
+            edge_end_points = self.process_edges(edge_segments.astype(np.float32, copy=False))
+            if edge_end_points.size == 0:
+                edge_end_points = np.empty((0, 6), dtype=np.float32)
+        self._set_edge_cylinders(edge_end_points, device=device)
+
     def generate(self, mesh: trimesh.Trimesh, device="cpu") -> None:
         """Detect sharp edges in the mesh and store the edge cylinder as virtual obstacle.
 
@@ -82,23 +112,7 @@ class EdgeCylinder(VirtualObstacleBase):
             edge_coords = np.hstack([v[sharp_edges[:, 0]], v[sharp_edges[:, 1]]])
             edge_end_points = self.process_edges(edge_coords)
             print(f"Detected {edge_end_points.shape[0]} edges after processing.")
-        self.device = device if isinstance(device, torch.device) else torch.device(device)
-        self.edges_pyt = torch.tensor(edge_end_points, dtype=torch.float32, device=self.device)
-        # create a cylinder spatial grid for the edges and for penetration offset computation
-        if edge_end_points.size > 0:
-            self.cylinders = CylinderSpatialGrid(
-                cylinders=np.concatenate(
-                    [
-                        edge_end_points,
-                        np.ones_like(edge_end_points[:, :1]) * self.cfg.cylinder_radius,
-                    ],
-                    axis=1,
-                ),
-                num_grid_cells=self.cfg.num_grid_cells,
-                device=self.device,
-            )
-        else:
-            self.cylinders = None
+        self._set_edge_cylinders(edge_end_points, device=device)
 
     def disable_visualizer(self):
         if hasattr(self, "_cylinder_visualizer"):
@@ -415,7 +429,7 @@ class GreedyconcatEdgeCylinder(EdgeCylinder):
             while len(v_set) >= self.cfg.min_points:
                 for i in range(len(v_set) - 1):
                     max_vi, max_dist = compute_max_distance_to_line_vec(V, v_set[i:])
-                    if max_dist < self.cfg.point_distance_threshold:
+                    if max_dist < 0.05:
                         break
                 if len(v_set) - i >= self.cfg.min_points:
                     processed_edge_coords.append(np.concatenate([V[v_set[i]], V[v_set[-1]]]))

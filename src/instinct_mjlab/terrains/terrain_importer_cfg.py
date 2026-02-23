@@ -17,6 +17,26 @@ class TerrainImporterCfg(TerrainImporterCfgBase):
     virtual_obstacles: dict[str, VirtualObstacleCfg] = field(default_factory=dict)
     """The virtual obstacles to use for the terrain importer."""
 
+    virtual_obstacle_source: Literal["mesh", "heightfield"] = "mesh"
+    """Source used to generate virtual obstacles.
+
+    - ``"mesh"``: Use concatenated terrain mesh surface.
+    - ``"heightfield"``: Extract obstacle edges directly from MuJoCo hfield data.
+    """
+
+    virtual_obstacle_hfield_height_threshold: float | None = 0.04
+    """Absolute height-difference threshold (meters) used by hfield edge extraction.
+
+    If set to ``None``, the extractor falls back to angle-based conversion:
+    ``tan(angle_threshold) * hfield_cell_size``.
+    """
+
+    virtual_obstacle_hfield_merge_runs: bool = True
+    """Whether to merge contiguous hfield edge intervals into long line segments."""
+
+    virtual_obstacle_hfield_project_to_high_side: bool = True
+    """Whether to project hfield edge segments to the higher side (convex crest side)."""
+
     collision_debug_vis: bool = False
     """Whether to visualize terrain collision geoms by tinting them in purple."""
 

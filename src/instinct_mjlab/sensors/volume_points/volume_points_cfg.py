@@ -32,9 +32,6 @@ class VolumePointsCfg(SensorCfg):
     body_names: str | list[str] = ".*"
     """Body name pattern(s) inside ``entity_name``. Supports regex expressions."""
 
-    prim_path: str = ""
-    """Legacy prim path string kept for migration compatibility."""
-
     filter_prim_paths_expr: list[str] = field(default_factory=list)
     """The list of primitive paths (or expressions) to filter volume points' body with. Defaults to an empty list,
     in which case

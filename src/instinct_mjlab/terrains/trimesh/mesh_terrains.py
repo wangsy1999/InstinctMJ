@@ -1461,7 +1461,7 @@ def motion_matched_terrain(
 
 @generate_wall
 def floating_box_terrain(
-    difficulty: float, cfg: mesh_terrains_cfg.PerlinMeshFloatingBoxTerrainCfg
+    difficulty: float, cfg: object
 ) -> tuple[list[trimesh.Trimesh], np.ndarray]:
     """Generates a floating box terrain."""
 
@@ -1557,7 +1557,7 @@ def floating_box_terrain(
 
 @generate_wall
 def random_multi_box_terrain(
-    difficulty: float, cfg: mesh_terrains_cfg.PerlinMeshRandomMultiBoxTerrainCfg
+    difficulty: float, cfg: object
 ) -> tuple[list[trimesh.Trimesh], np.ndarray]:
     """Generates a terrain containing multiple boxes with random size and orientation."""
 

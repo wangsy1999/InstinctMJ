@@ -119,7 +119,8 @@ class VolumePoints(Sensor[VolumePointsData]):
         if not body_ids:
             raise RuntimeError(
                 "Failed to initialize volume points sensor for specified bodies."
-                f"\n\tInput prim path    : {self.cfg.prim_path}"
+                f"\n\tEntity name        : {self.cfg.entity_name}"
+                f"\n\tBody patterns      : {self.cfg.body_names}"
             )
         self._body_ids = torch.tensor(body_ids, device=device, dtype=torch.long)
         self._body_names = body_names
@@ -260,22 +261,11 @@ class VolumePoints(Sensor[VolumePointsData]):
         return body_ids, body_names
 
     def _resolve_entity_and_patterns_from_cfg(self) -> tuple[str, list[str]]:
-        # Prefer explicit mjlab fields.
         entity_name = self.cfg.entity_name.strip()
         if isinstance(self.cfg.body_names, str):
             body_patterns = [self.cfg.body_names]
         else:
             body_patterns = list(self.cfg.body_names)
-
-        # Backward-compatible parsing from legacy prim_path.
-        if (not entity_name or body_patterns == [".*"]) and self.cfg.prim_path:
-            tokens = [token for token in self.cfg.prim_path.split("/") if token]
-            tokens = [token for token in tokens if token not in {"World", "envs", "{ENV_REGEX_NS}"}]
-            tokens = [token for token in tokens if not token.startswith("env_")]
-            if len(tokens) >= 2:
-                if not entity_name:
-                    entity_name = tokens[-2]
-                body_patterns = [tokens[-1]]
 
         return entity_name, body_patterns
 

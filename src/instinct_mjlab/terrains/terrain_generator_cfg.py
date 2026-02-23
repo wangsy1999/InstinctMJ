@@ -16,12 +16,6 @@ class FiledTerrainGeneratorCfg(TerrainGeneratorCfgBase):
     """Optional generator-wide slope threshold propagated to compatible sub-terrains."""
     use_cache: bool = False
     """Kept for InstinctLab config compatibility. Terrain caching is currently handled by submodules."""
-    legacy_two_arg_collision_mode: Literal["hfield", "mesh"] = "hfield"
-    """Collision mode for legacy two-arg sub-terrain functions.
-
-    - ``"hfield"``: Convert mesh surfaces to MuJoCo hfield collision.
-    - ``"mesh"``: Keep mesh collision, matching InstinctLab terrain behavior.
-    """
     hfield_resolution: float | None = None
     """Sampling resolution (meters) for filed-generator mesh->hfield conversion.
 

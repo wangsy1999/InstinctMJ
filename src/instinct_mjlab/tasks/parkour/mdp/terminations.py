@@ -26,7 +26,7 @@ def sub_terrain_out_of_bounds(
   terrain_type = env.cfg.scene.terrain.terrain_type
   if terrain_type == "plane":
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-  elif terrain_type in ("generator", "hacked_generator"):
+  elif terrain_type == "hacked_generator":
     # obtain the size of the sub-terrains
     terrain_gen_cfg = env.scene.terrain.cfg.terrain_generator
     grid_width, grid_length = terrain_gen_cfg.size
@@ -47,7 +47,7 @@ def sub_terrain_out_of_bounds(
   else:
     raise ValueError(
       "Received unsupported terrain type, must be one of: "
-      "'plane', 'generator', 'hacked_generator'."
+      "'plane', 'hacked_generator'."
     )
 
 

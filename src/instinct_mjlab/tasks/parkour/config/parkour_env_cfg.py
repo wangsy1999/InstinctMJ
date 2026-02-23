@@ -1111,7 +1111,10 @@ def set_parkour_events(cfg: ManagerBasedRlEnvCfg) -> None:
     "register_virtual_obstacles": EventTermCfg(
       func=instinct_envs_mdp.register_virtual_obstacle_to_sensor,
       mode="startup",
-      params={"sensor_cfgs": SceneEntityCfg(_LEG_VOLUME_POINTS_SENSOR_NAME)},
+      params={
+        "sensor_cfgs": SceneEntityCfg(_LEG_VOLUME_POINTS_SENSOR_NAME),
+        "enable_debug_vis": True,
+      },
     ),
     "reset_robot_joints": EventTermCfg(
       func=envs_mdp.reset_joints_by_offset,
@@ -1161,6 +1164,10 @@ def set_parkour_terrain(cfg: ManagerBasedRlEnvCfg, play: bool) -> None:
     terrain_type="hacked_generator",
     terrain_generator=copy.deepcopy(terrain_gen),
     max_init_terrain_level=5,
+    virtual_obstacle_source="heightfield",
+    virtual_obstacle_hfield_height_threshold=0.04,
+    virtual_obstacle_hfield_merge_runs=True,
+    virtual_obstacle_hfield_project_to_high_side=True,
     collision_debug_vis=False,
     collision_debug_rgba=(0.62, 0.2, 0.9, 0.35),
     virtual_obstacles={
@@ -1170,19 +1177,23 @@ def set_parkour_terrain(cfg: ManagerBasedRlEnvCfg, play: bool) -> None:
 
 
 def set_parkour_scene_visual_style(cfg: ManagerBasedRlEnvCfg) -> None:
-  """Set parkour scene visual style (bright, high-visibility terrain)."""
+  """Set parkour scene visual style (matte ground for clearer relief)."""
   apply_scene_visual_style(
     cfg.scene,
     style_name="parkour",
     style_cfg=SceneVisualStyleCfg(
       ground_builtin="checker",
       ground_mark="edge",
-      # Use near-white tones so terrain relief is easier to read than the
-      # previous dark blue style.
-      ground_rgb1=(0.96, 0.96, 0.96),
-      ground_rgb2=(0.88, 0.88, 0.88),
-      ground_mark_rgb=(0.78, 0.78, 0.78),
-      ground_reflectance=0.05,
+      # Matte neutral-gray palette with softer headlight to avoid washed-out
+      # terrain details while keeping the ground visually bright.
+      ground_rgb1=(0.80, 0.80, 0.80),
+      ground_rgb2=(0.70, 0.70, 0.70),
+      ground_mark_rgb=(0.58, 0.58, 0.58),
+      ground_reflectance=0.0,
+      # Match mjlab-like softer lighting instead of the brighter global style.
+      headlight_ambient=(0.32, 0.32, 0.32),
+      headlight_diffuse=(0.52, 0.52, 0.52),
+      headlight_specular=(0.0, 0.0, 0.0),
     ),
     preserve_collision_rgba=False,
   )
