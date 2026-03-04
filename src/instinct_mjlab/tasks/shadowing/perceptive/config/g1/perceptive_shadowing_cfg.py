@@ -178,7 +178,7 @@ class G1PerceptiveShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
         # Raise CCD iterations for perceptive terrain contacts (default 50 can trigger EPA horizon warnings).
         self.sim.mujoco.ccd_iterations = 128
         # Mirror parkour CCD mode for dense terrain contact pairs.
-        self.sim.mujoco.multiccd = True
+        self.sim.mujoco.multiccd = False
 
         MOTION_NAME = list(motion_reference_cfg.motion_buffers.keys())[0]
         motion_buffer = motion_reference_cfg.motion_buffers[MOTION_NAME]

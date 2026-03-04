@@ -642,6 +642,8 @@ class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
         self.sim.nconmax = 100
         self.sim.njmax = 300
         self.sim.mujoco.timestep = 1.0 / 50.0 / self.decimation
+        self.sim.mujoco.iterations = 10
+        self.sim.mujoco.ls_iterations = 20
         # Keep CCD iterations moderate to avoid large EPA buffers at 4096 envs.
         self.sim.mujoco.ccd_iterations = 80
 

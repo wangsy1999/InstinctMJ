@@ -47,6 +47,11 @@ class ShadowingCommandBaseCfg(CommandTermCfg):
     the command sequence will be 1-frame longer than the motion reference.
     """
 
+    realtime_mode: bool | int = False
+    """Whether to update command in real-time. Sub-classes can override semantics."""
+
+    visualizer_cfg: VisualizationMarkersCfg | None = None
+
     def build(self, env):
         """Build the command term from this config (mjlab CommandTermCfg interface)."""
         return self.class_type(self, env)

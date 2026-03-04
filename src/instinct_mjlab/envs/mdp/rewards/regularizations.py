@@ -45,6 +45,30 @@ _NON_EFFORT_CTRL_ACTUATOR_TYPES = (
 )
 
 
+def _unwrap_base_actuator(actuator):
+    base_actuator = actuator
+    while hasattr(base_actuator, "base_actuator"):
+        base_actuator = base_actuator.base_actuator
+    return base_actuator
+
+
+def _iter_joint_actuator_targets_and_stiffness(asset: Articulation):
+    for actuator in asset.actuators:
+        if actuator.transmission_type != TransmissionType.JOINT:
+            continue
+        base_actuator = _unwrap_base_actuator(actuator)
+        if not hasattr(base_actuator, "stiffness"):
+            raise AttributeError(
+                f"Actuator '{type(base_actuator).__name__}' is missing stiffness for normalize_by_stiffness=True."
+            )
+        stiffness = base_actuator.stiffness
+        if stiffness is None:
+            raise ValueError(
+                f"Actuator '{type(base_actuator).__name__}' has stiffness=None for normalize_by_stiffness=True."
+            )
+        yield base_actuator.target_ids, stiffness
+
+
 def _joint_applied_and_computed_torque(asset: Articulation) -> tuple[torch.Tensor, torch.Tensor]:
     """Build joint-wise applied/computed torque tensors from actuator-space buffers.
 
@@ -67,10 +91,7 @@ def _joint_applied_and_computed_torque(asset: Articulation) -> tuple[torch.Tenso
             continue
 
         applied_values = local_actuator_force[:, actuator.ctrl_ids]
-
-        ctrl_type_actuator = actuator
-        while hasattr(ctrl_type_actuator, "base_actuator"):
-            ctrl_type_actuator = ctrl_type_actuator.base_actuator
+        ctrl_type_actuator = _unwrap_base_actuator(actuator)
 
         if isinstance(ctrl_type_actuator, _NON_EFFORT_CTRL_ACTUATOR_TYPES):
             computed_values = applied_values
@@ -92,23 +113,35 @@ def _body_lin_acc_w(
     body_link_lin_vel_w = asset.data.body_link_lin_vel_w[:, asset_cfg.body_ids, :]
     acc_cache_name = f"_instinct_body_link_lin_acc_w_{asset_cfg.name}"
     acc_step_cache_name = f"_instinct_body_link_lin_acc_step_{asset_cfg.name}"
-    sim_step = getattr(env, "_sim_step_counter", None)
-    if sim_step is not None and getattr(env, acc_step_cache_name, None) == sim_step:
+    sim_step = env._sim_step_counter
+    if getattr(env, acc_step_cache_name, None) == sim_step:
         cached_body_link_lin_acc_w = getattr(env, acc_cache_name, None)
-        if cached_body_link_lin_acc_w is not None and cached_body_link_lin_acc_w.shape == body_link_lin_vel_w.shape:
-            return cached_body_link_lin_acc_w
+        if cached_body_link_lin_acc_w is None:
+            raise RuntimeError(
+                f"Missing cached body linear acceleration '{acc_cache_name}' for sim step {sim_step}."
+            )
+        if cached_body_link_lin_acc_w.shape != body_link_lin_vel_w.shape:
+            raise RuntimeError(
+                f"Cached body linear acceleration shape mismatch: {cached_body_link_lin_acc_w.shape} vs"
+                f" expected {body_link_lin_vel_w.shape}."
+            )
+        return cached_body_link_lin_acc_w
 
     cache_name = f"_instinct_prev_body_link_lin_vel_w_{asset_cfg.name}"
     prev_body_link_lin_vel_w = getattr(env, cache_name, None)
-    if prev_body_link_lin_vel_w is None or prev_body_link_lin_vel_w.shape != body_link_lin_vel_w.shape:
+    if prev_body_link_lin_vel_w is None:
         body_link_lin_acc_w = torch.zeros_like(body_link_lin_vel_w)
+    elif prev_body_link_lin_vel_w.shape != body_link_lin_vel_w.shape:
+        raise RuntimeError(
+            f"Cached body linear velocity shape mismatch: {prev_body_link_lin_vel_w.shape} vs"
+            f" expected {body_link_lin_vel_w.shape}."
+        )
     else:
         body_link_lin_acc_w = (body_link_lin_vel_w - prev_body_link_lin_vel_w) / env.step_dt
     body_link_lin_acc_w[env.episode_length_buf <= 1] = 0.0
     setattr(env, cache_name, body_link_lin_vel_w.detach().clone())
     setattr(env, acc_cache_name, body_link_lin_acc_w)
-    if sim_step is not None:
-        setattr(env, acc_step_cache_name, sim_step)
+    setattr(env, acc_step_cache_name, sim_step)
     return body_link_lin_acc_w
 
 
@@ -123,17 +156,11 @@ def motors_power_square(
     joint_applied_torque, _ = _joint_applied_and_computed_torque(asset)
     power_j = joint_applied_torque * asset.data.joint_vel  # (batch_size, num_joints)
     if normalize_by_stiffness:
-        for actuator in asset.actuators:
-            if actuator.transmission_type != TransmissionType.JOINT:
-                continue
-            base_actuator = getattr(actuator, "base_actuator", actuator)
-            target_ids = base_actuator.target_ids
-            stiffness = getattr(base_actuator, "stiffness", None)
-            if stiffness is not None:
-                if torch.is_tensor(stiffness):
-                    power_j[:, target_ids] /= stiffness.to(device=power_j.device, dtype=power_j.dtype)
-                else:
-                    power_j[:, target_ids] /= float(stiffness)
+        for target_ids, stiffness in _iter_joint_actuator_targets_and_stiffness(asset):
+            if torch.is_tensor(stiffness):
+                power_j[:, target_ids] /= stiffness.to(device=power_j.device, dtype=power_j.dtype)
+            else:
+                power_j[:, target_ids] /= float(stiffness)
     power_j = power_j[:, asset_cfg.joint_ids]  # (batch_size, num_selected_joints)
     power = torch.sum(torch.square(power_j), dim=-1)  # (batch_size,)
     if normalize_by_num_joints:
@@ -390,17 +417,11 @@ def joint_torques_l2(
     torques = torch.abs(joint_applied_torque)
 
     if normalize_by_stiffness:
-        for actuator in asset.actuators:
-            if actuator.transmission_type != TransmissionType.JOINT:
-                continue
-            base_actuator = getattr(actuator, "base_actuator", actuator)
-            target_ids = base_actuator.target_ids
-            stiffness = getattr(base_actuator, "stiffness", None)
-            if stiffness is not None:
-                if torch.is_tensor(stiffness):
-                    torques[:, target_ids] /= stiffness.to(device=torques.device, dtype=torques.dtype)
-                else:
-                    torques[:, target_ids] /= float(stiffness)
+        for target_ids, stiffness in _iter_joint_actuator_targets_and_stiffness(asset):
+            if torch.is_tensor(stiffness):
+                torques[:, target_ids] /= stiffness.to(device=torques.device, dtype=torques.dtype)
+            else:
+                torques[:, target_ids] /= float(stiffness)
     torques = torques[:, asset_cfg.joint_ids]
 
     torques = torch.sum(torch.square(torques), dim=-1)
@@ -426,17 +447,11 @@ def joint_torques_gauss(
     torques = torch.abs(joint_applied_torque)
 
     if normalize_by_stiffness:
-        for actuator in asset.actuators:
-            if actuator.transmission_type != TransmissionType.JOINT:
-                continue
-            base_actuator = getattr(actuator, "base_actuator", actuator)
-            target_ids = base_actuator.target_ids
-            stiffness = getattr(base_actuator, "stiffness", None)
-            if stiffness is not None:
-                if torch.is_tensor(stiffness):
-                    torques[:, target_ids] /= stiffness.to(device=torques.device, dtype=torques.dtype)
-                else:
-                    torques[:, target_ids] /= float(stiffness)
+        for target_ids, stiffness in _iter_joint_actuator_targets_and_stiffness(asset):
+            if torch.is_tensor(stiffness):
+                torques[:, target_ids] /= stiffness.to(device=torques.device, dtype=torques.dtype)
+            else:
+                torques[:, target_ids] /= float(stiffness)
     torques = torques[:, asset_cfg.joint_ids]
 
     if torlerance > 0:
@@ -840,17 +855,11 @@ def applied_torque_limits_gauss(
     out_of_limits = torch.abs(applied_torque - computed_torque)
 
     if normalize_by_stiffness:
-        for actuator in asset.actuators:
-            if actuator.transmission_type != TransmissionType.JOINT:
-                continue
-            base_actuator = getattr(actuator, 'base_actuator', actuator)
-            target_ids = base_actuator.target_ids
-            stiffness = getattr(base_actuator, 'stiffness', None)
-            if stiffness is not None:
-                if torch.is_tensor(stiffness):
-                    out_of_limits[:, target_ids] /= stiffness.to(device=out_of_limits.device, dtype=out_of_limits.dtype)
-                else:
-                    out_of_limits[:, target_ids] /= float(stiffness)
+        for target_ids, stiffness in _iter_joint_actuator_targets_and_stiffness(asset):
+            if torch.is_tensor(stiffness):
+                out_of_limits[:, target_ids] /= stiffness.to(device=out_of_limits.device, dtype=out_of_limits.dtype)
+            else:
+                out_of_limits[:, target_ids] /= float(stiffness)
     out_of_limits = out_of_limits[:, asset_cfg.joint_ids]  # (batch_size, num_selected_joints)
 
     out_of_limits_err = torch.square(out_of_limits)
@@ -882,17 +891,11 @@ def applied_torque_limits_square(
     out_of_limits = torch.abs(applied_torque - computed_torque)
 
     if normalize_by_stiffness:
-        for actuator in asset.actuators:
-            if actuator.transmission_type != TransmissionType.JOINT:
-                continue
-            base_actuator = getattr(actuator, 'base_actuator', actuator)
-            target_ids = base_actuator.target_ids
-            stiffness = getattr(base_actuator, 'stiffness', None)
-            if stiffness is not None:
-                if torch.is_tensor(stiffness):
-                    out_of_limits[:, target_ids] /= stiffness.to(device=out_of_limits.device, dtype=out_of_limits.dtype)
-                else:
-                    out_of_limits[:, target_ids] /= float(stiffness)
+        for target_ids, stiffness in _iter_joint_actuator_targets_and_stiffness(asset):
+            if torch.is_tensor(stiffness):
+                out_of_limits[:, target_ids] /= stiffness.to(device=out_of_limits.device, dtype=out_of_limits.dtype)
+            else:
+                out_of_limits[:, target_ids] /= float(stiffness)
     out_of_limits = out_of_limits[:, asset_cfg.joint_ids]  # (batch_size, num_selected_joints)
 
     out_of_limits_err = torch.sum(torch.square(out_of_limits), dim=-1)  # (batch_size,)

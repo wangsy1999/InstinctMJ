@@ -710,6 +710,8 @@ class ShadowingEnvCfg(InstinctLabRLEnvCfg):
         self.episode_length_s = 10.0
         # simulation settings
         self.sim.mujoco.timestep = 1.0 / 50.0 / self.decimation
+        self.sim.mujoco.iterations = 10
+        self.sim.mujoco.ls_iterations = 20
 
         # All managers are already dicts, no conversion needed!
 

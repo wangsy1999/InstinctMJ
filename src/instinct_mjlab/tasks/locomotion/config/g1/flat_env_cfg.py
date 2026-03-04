@@ -424,8 +424,8 @@ def instinct_g1_locomotion_flat_env_cfg(*, play: bool = False) -> ManagerBasedRl
       mujoco=MujocoCfg(
         timestep=0.005,
         solver="newton",
-        iterations=100,
-        ls_iterations=50,
+        iterations=10,
+        ls_iterations=20,
         ccd_iterations=500 if not play else 50,
       ),
     ),

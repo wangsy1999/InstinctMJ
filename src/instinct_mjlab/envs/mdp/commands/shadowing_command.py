@@ -47,8 +47,6 @@ class _MjlabMarkerVisualizer:
 
     @staticmethod
     def _as_tensor(value, device: torch.device | str | None = None) -> torch.Tensor:
-        if value is None:
-            return torch.empty(0, device=device)
         if torch.is_tensor(value):
             return value
         return torch.as_tensor(value, device=device)
@@ -78,8 +76,6 @@ class _MjlabMarkerVisualizer:
     @staticmethod
     def _marker_color(marker_cfg, default=(0.0, 1.0, 1.0, 0.8)):
         color = getattr(marker_cfg, "color", default)
-        if color is None:
-            return default
         return tuple(float(v) for v in color)
 
     def visualize(
@@ -88,9 +84,6 @@ class _MjlabMarkerVisualizer:
         orientations: torch.Tensor | None = None,
         scales: torch.Tensor | None = None,
     ) -> None:
-        if translations is None:
-            return
-
         translations_t = self._as_tensor(translations).reshape(-1, 3)
         if translations_t.numel() == 0:
             return
@@ -111,9 +104,11 @@ class _MjlabMarkerVisualizer:
         else:
             scales_t = torch.ones((translations_t.shape[0], 3), device=device, dtype=translations_t.dtype)
 
-        marker_cfgs = getattr(self._cfg, "markers", {})
-        marker_name, marker_cfg = next(iter(marker_cfgs.items()), ("point", None))
-        marker_scale = getattr(marker_cfg, "scale", (0.15, 0.15, 0.15))
+        marker_cfgs = self._cfg.markers
+        if not marker_cfgs:
+            raise ValueError("Visualization marker config must define at least one marker.")
+        marker_name, marker_cfg = next(iter(marker_cfgs.items()))
+        marker_scale = marker_cfg.scale
         marker_color = self._marker_color(marker_cfg)
 
         indices = self._iter_selected_indices(translations_t.shape[0])
@@ -121,7 +116,9 @@ class _MjlabMarkerVisualizer:
             return
 
         if marker_name in ("point", "sphere"):
-            base_radius = float(getattr(marker_cfg, "radius", marker_scale[0] * 0.25))
+            if not hasattr(marker_cfg, "radius"):
+                raise ValueError(f"Marker '{marker_name}' requires a 'radius' field.")
+            base_radius = float(marker_cfg.radius)
             for idx in indices:
                 radius = base_radius * float(scales_t[idx, 0])
                 self._visualizer.add_sphere(
@@ -132,8 +129,10 @@ class _MjlabMarkerVisualizer:
             return
 
         if marker_name in ("patch", "cylinder"):
-            base_radius = float(getattr(marker_cfg, "radius", marker_scale[0] * 0.5))
-            base_height = float(getattr(marker_cfg, "height", marker_scale[2]))
+            if not hasattr(marker_cfg, "radius") or not hasattr(marker_cfg, "height"):
+                raise ValueError(f"Marker '{marker_name}' requires both 'radius' and 'height' fields.")
+            base_radius = float(marker_cfg.radius)
+            base_height = float(marker_cfg.height)
             up_axis = torch.tensor([0.0, 0.0, 1.0], device=device, dtype=translations_t.dtype)
             for idx in indices:
                 start = translations_t[idx]
@@ -147,14 +146,13 @@ class _MjlabMarkerVisualizer:
             return
 
         if marker_name == "arrow":
+            if orientations_t is None:
+                raise ValueError("Arrow marker visualization requires orientations.")
             base_length = float(marker_scale[0])
             base_width = float(marker_scale[1]) * 0.2
             unit_x = torch.tensor([1.0, 0.0, 0.0], device=device, dtype=translations_t.dtype).unsqueeze(0)
             for idx in indices:
-                if orientations_t is not None:
-                    direction = math_utils.quat_apply(orientations_t[idx].unsqueeze(0), unit_x).squeeze(0)
-                else:
-                    direction = unit_x.squeeze(0)
+                direction = math_utils.quat_apply(orientations_t[idx].unsqueeze(0), unit_x).squeeze(0)
                 start = translations_t[idx]
                 end = start + direction * (base_length * float(scales_t[idx, 0]))
                 self._visualizer.add_arrow(
@@ -167,8 +165,9 @@ class _MjlabMarkerVisualizer:
 
         # Default "pose"/"frame" behavior.
         if orientations_t is None:
-            orientations_t = torch.zeros((translations_t.shape[0], 4), device=device, dtype=translations_t.dtype)
-            orientations_t[:, 0] = 1.0
+            raise ValueError(
+                f"Marker '{marker_name}' visualization requires orientations."
+            )
         rot_mats = math_utils.matrix_from_quat(orientations_t)
         base_frame_scale = float(marker_scale[0])
         for idx in indices:
@@ -264,7 +263,7 @@ class ShadowingCommandBase(CommandTerm):
         self._motion_reference.data  # trigger the update of the motion reference data
 
         # update the real-time mode for the position
-        if getattr(self.cfg, "realtime_mode", False):
+        if self.cfg.realtime_mode:
             env_ids = self._motion_reference.ALL_INDICES
         else:
             env_ids = self._motion_reference_updated_env_ids
@@ -284,7 +283,7 @@ class ShadowingCommandBase(CommandTerm):
         pass
 
     def _debug_vis_impl(self, visualizer: "DebugVisualizer") -> None:
-        if getattr(self.cfg, "visualizer_cfg", None) is None:
+        if self.cfg.visualizer_cfg is None:
             return
         self._visualizer = _MjlabMarkerVisualizer(visualizer, self.cfg.visualizer_cfg, self.num_envs)
         self._compute_debug_vis_data()
@@ -1181,14 +1180,10 @@ class JointPosRefCommand(ShadowingCommandBase):
         """
         # initialize the base class
         super().__init__(cfg, env)
-        if isinstance(cfg.asset_cfg.joint_ids, slice):
-            self._joint_ids = slice(None)
-            self._joint_ids_tensor = None
-            self._num_joints = self._motion_reference.data.joint_pos.shape[2]
-        else:
-            self._joint_ids = list(cfg.asset_cfg.joint_ids)
-            self._joint_ids_tensor = torch.tensor(self._joint_ids, device=self.device, dtype=torch.long)
-            self._num_joints = len(self._joint_ids)
+        self._joint_ids = cfg.asset_cfg.joint_ids
+        robot_default_joint_pos = self._env.scene[cfg.asset_cfg.name].data.default_joint_pos
+        self._default_joint_pos = robot_default_joint_pos[:, self._joint_ids].clone()
+        self._num_joints = self._default_joint_pos.shape[-1]
         # generate the command tensor buffer
         data_dims = (self._num_joints,)
         self._command = torch.ones(
@@ -1200,13 +1195,6 @@ class JointPosRefCommand(ShadowingCommandBase):
             device=self.device,
             dtype=torch.bool,
         )  # (num_envs, num_frames, num_joints)
-        # get and copy the default joint position
-        # shape (num_envs, num_joints)
-        robot_default_joint_pos = self._env.scene[cfg.asset_cfg.name].data.default_joint_pos
-        if self._joint_ids_tensor is None:
-            self._default_joint_pos = robot_default_joint_pos.clone()
-        else:
-            self._default_joint_pos = robot_default_joint_pos[:, self._joint_ids_tensor].clone()
         # generate state buffer in case we need additional frame as a pseudo command frame
         if self.cfg.current_state_command:
             self._current_state = torch.zeros(
@@ -1222,9 +1210,7 @@ class JointPosRefCommand(ShadowingCommandBase):
 
     @property
     def mask(self) -> torch.Tensor:
-        joint_pos_mask = self._motion_reference.data.joint_pos_mask
-        if self._joint_ids_tensor is not None:
-            joint_pos_mask = joint_pos_mask[:, :, self._joint_ids_tensor]
+        joint_pos_mask = self._motion_reference.data.joint_pos_mask[:, :, self._joint_ids]
         mask = torch.logical_and(
             self._mask,
             self._motion_reference.data.validity.unsqueeze(-1),
@@ -1235,19 +1221,14 @@ class JointPosRefCommand(ShadowingCommandBase):
         return mask
 
     def _update_command_by_env_ids(self, env_ids: Sequence[int] | torch.Tensor):
-        joint_pos_ref = self._motion_reference.data.joint_pos[env_ids]
-        joint_pos_mask = self._motion_reference.data.joint_pos_mask[env_ids]
-        if self._joint_ids_tensor is not None:
-            joint_pos_ref = joint_pos_ref[:, :, self._joint_ids_tensor]
-            joint_pos_mask = joint_pos_mask[:, :, self._joint_ids_tensor]
+        joint_pos_ref = self._motion_reference.data.joint_pos[env_ids][:, :, self._joint_ids]
+        joint_pos_mask = self._motion_reference.data.joint_pos_mask[env_ids][:, :, self._joint_ids]
         self._command[env_ids, :] = joint_pos_ref - self._default_joint_pos[env_ids].unsqueeze(1)
         self._command[env_ids, :] *= joint_pos_mask
         self._command[env_ids, :] *= self._motion_reference.data.validity[env_ids].unsqueeze(-1)
         self._command[env_ids, :] *= self._mask[env_ids]
         if self.cfg.current_state_command:
-            joint_pos = self._env.scene[self.cfg.asset_cfg.name].data.joint_pos[env_ids]
-            if self._joint_ids_tensor is not None:
-                joint_pos = joint_pos[:, self._joint_ids_tensor]
+            joint_pos = self._env.scene[self.cfg.asset_cfg.name].data.joint_pos[env_ids][:, self._joint_ids]
             self._current_state[env_ids] = joint_pos.unsqueeze(1) - self._default_joint_pos[env_ids].unsqueeze(1)
 
 
@@ -1265,14 +1246,8 @@ class JointPosErrRefCommand(ShadowingCommandBase):
         """
         # initialize the base class
         super().__init__(cfg, env)
-        if isinstance(cfg.asset_cfg.joint_ids, slice):
-            self._joint_ids = slice(None)
-            self._joint_ids_tensor = None
-            self._num_joints = self._motion_reference.data.joint_pos.shape[2]
-        else:
-            self._joint_ids = list(cfg.asset_cfg.joint_ids)
-            self._joint_ids_tensor = torch.tensor(self._joint_ids, device=self.device, dtype=torch.long)
-            self._num_joints = len(self._joint_ids)
+        self._joint_ids = cfg.asset_cfg.joint_ids
+        self._num_joints = self._motion_reference.data.joint_pos[:, :, self._joint_ids].shape[-1]
         # generate the command tensor buffer
         data_dims = (self._num_joints,)
         self._command = torch.ones(
@@ -1299,9 +1274,7 @@ class JointPosErrRefCommand(ShadowingCommandBase):
 
     @property
     def mask(self) -> torch.Tensor:
-        joint_pos_mask = self._motion_reference.data.joint_pos_mask
-        if self._joint_ids_tensor is not None:
-            joint_pos_mask = joint_pos_mask[:, :, self._joint_ids_tensor]
+        joint_pos_mask = self._motion_reference.data.joint_pos_mask[:, :, self._joint_ids]
         mask = torch.logical_and(
             self._mask,
             self._motion_reference.data.validity.unsqueeze(-1),
@@ -1312,13 +1285,9 @@ class JointPosErrRefCommand(ShadowingCommandBase):
         return mask
 
     def _update_command_by_env_ids(self, env_ids: Sequence[int] | torch.Tensor):
-        joint_pos_ref = self._motion_reference.data.joint_pos[env_ids]
-        joint_pos = self._env.scene[self.cfg.asset_cfg.name].data.joint_pos[env_ids]
-        joint_pos_mask = self._motion_reference.data.joint_pos_mask[env_ids]
-        if self._joint_ids_tensor is not None:
-            joint_pos_ref = joint_pos_ref[:, :, self._joint_ids_tensor]
-            joint_pos = joint_pos[:, self._joint_ids_tensor]
-            joint_pos_mask = joint_pos_mask[:, :, self._joint_ids_tensor]
+        joint_pos_ref = self._motion_reference.data.joint_pos[env_ids][:, :, self._joint_ids]
+        joint_pos = self._env.scene[self.cfg.asset_cfg.name].data.joint_pos[env_ids][:, self._joint_ids]
+        joint_pos_mask = self._motion_reference.data.joint_pos_mask[env_ids][:, :, self._joint_ids]
         self._command[env_ids, :] = joint_pos_ref - joint_pos.unsqueeze(1)
         self._command[env_ids] *= (
             joint_pos_mask
@@ -1341,14 +1310,10 @@ class JointVelRefCommand(ShadowingCommandBase):
         """
         # initialize the base class
         super().__init__(cfg, env)
-        if isinstance(cfg.asset_cfg.joint_ids, slice):
-            self._joint_ids = slice(None)
-            self._joint_ids_tensor = None
-            self._num_joints = self._motion_reference.data.joint_vel.shape[2]
-        else:
-            self._joint_ids = list(cfg.asset_cfg.joint_ids)
-            self._joint_ids_tensor = torch.tensor(self._joint_ids, device=self.device, dtype=torch.long)
-            self._num_joints = len(self._joint_ids)
+        self._joint_ids = cfg.asset_cfg.joint_ids
+        robot_default_joint_vel = self._env.scene[cfg.asset_cfg.name].data.default_joint_vel
+        self._default_joint_vel = robot_default_joint_vel[:, self._joint_ids].clone()
+        self._num_joints = self._default_joint_vel.shape[-1]
         # generate the command tensor buffer
         data_dims = (self._num_joints,)
         self._command = torch.ones(
@@ -1360,13 +1325,6 @@ class JointVelRefCommand(ShadowingCommandBase):
             device=self.device,
             dtype=torch.bool,
         )  # (num_envs, num_frames, num_joints)
-        # get and copy the default joint velocity
-        # shape (num_envs, num_joints)
-        robot_default_joint_vel = self._env.scene[cfg.asset_cfg.name].data.default_joint_vel
-        if self._joint_ids_tensor is None:
-            self._default_joint_vel = robot_default_joint_vel.clone()
-        else:
-            self._default_joint_vel = robot_default_joint_vel[:, self._joint_ids_tensor].clone()
         # generate state buffer in case we need additional frame as a pseudo command frame
         if self.cfg.current_state_command:
             self._current_state = torch.zeros(
@@ -1382,9 +1340,7 @@ class JointVelRefCommand(ShadowingCommandBase):
 
     @property
     def mask(self) -> torch.Tensor:
-        joint_vel_mask = self._motion_reference.data.joint_vel_mask
-        if self._joint_ids_tensor is not None:
-            joint_vel_mask = joint_vel_mask[:, :, self._joint_ids_tensor]
+        joint_vel_mask = self._motion_reference.data.joint_vel_mask[:, :, self._joint_ids]
         mask = torch.logical_and(
             self._mask,
             self._motion_reference.data.validity.unsqueeze(-1),
@@ -1395,11 +1351,8 @@ class JointVelRefCommand(ShadowingCommandBase):
         return mask
 
     def _update_command_by_env_ids(self, env_ids: Sequence[int] | torch.Tensor):
-        joint_vel_ref = self._motion_reference.data.joint_vel[env_ids]
-        joint_vel_mask = self._motion_reference.data.joint_vel_mask[env_ids]
-        if self._joint_ids_tensor is not None:
-            joint_vel_ref = joint_vel_ref[:, :, self._joint_ids_tensor]
-            joint_vel_mask = joint_vel_mask[:, :, self._joint_ids_tensor]
+        joint_vel_ref = self._motion_reference.data.joint_vel[env_ids][:, :, self._joint_ids]
+        joint_vel_mask = self._motion_reference.data.joint_vel_mask[env_ids][:, :, self._joint_ids]
         self._command[env_ids, :] = joint_vel_ref - self._default_joint_vel[env_ids].unsqueeze(1)
         self._command[env_ids, :] *= (
             joint_vel_mask
@@ -1407,9 +1360,7 @@ class JointVelRefCommand(ShadowingCommandBase):
             * self._mask[env_ids]
         )
         if self.cfg.current_state_command:
-            joint_vel = self._env.scene[self.cfg.asset_cfg.name].data.joint_vel[env_ids]
-            if self._joint_ids_tensor is not None:
-                joint_vel = joint_vel[:, self._joint_ids_tensor]
+            joint_vel = self._env.scene[self.cfg.asset_cfg.name].data.joint_vel[env_ids][:, self._joint_ids]
             self._current_state[env_ids] = joint_vel.unsqueeze(1) - self._default_joint_vel[env_ids].unsqueeze(1)
 
 

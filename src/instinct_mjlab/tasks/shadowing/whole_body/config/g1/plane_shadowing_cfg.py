@@ -1001,6 +1001,8 @@ def g1_plane_shadowing_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.sim.njmax = 1200
     cfg.sim.nconmax = None
     cfg.sim.mujoco.timestep = 1.0 / 50.0 / cfg.decimation
+    cfg.sim.mujoco.iterations = 10
+    cfg.sim.mujoco.ls_iterations = 20
 
     _apply_motion_buffer_curriculum(cfg, motion_reference_cfg)
     if play:
