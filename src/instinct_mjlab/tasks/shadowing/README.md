@@ -1,5 +1,11 @@
 # Shadowing Task
 
+## InstinctLab 原版地址
+
+- 项目根 README: `/home/duanxin/Xyk/Project-Instinct/InstinctLab/README.md`
+- Shadowing 原版 README: `/home/duanxin/Xyk/Project-Instinct/InstinctLab/source/instinctlab/instinctlab/tasks/shadowing/README.md`
+- Perceptive Shadowing 原版配置: `/home/duanxin/Xyk/Project-Instinct/InstinctLab/source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/perceptive_shadowing_cfg.py`
+
 ## Basic Usage Guidelines
 
 ### BeyondMimic Shadowing
@@ -49,9 +55,14 @@ python scripts/instinct_rl/play.py --task=Instinct-Shadowing-WholeBody-Plane-G1-
 **Task IDs:**
 - `Instinct-Perceptive-Shadowing-G1-v0` (Deep Whole-body Parkour)
 
-1. Go to `perceptive/config/g1/perceptive_shadowing_cfg.py` and set the `MOTION_FOLDER` to the motion you want to use. The `motion_buffer` and corresponding terrain generator will read the `MOTION_FOLDER` and corresponding metadata.yaml file.
+1. Configure perceptive environment variables before training or play.
 
-    - `MOTION_FOLDER`: The folder path to where you store the motion files.
+    - `INSTINCT_PERCEPTIVE_MOTION_FOLDER`: motion dataset folder. The task reads `metadata.yaml` under this folder.
+    - `INSTINCT_PERCEPTIVE_FORCE_PLANE`: force training terrain to plane (`true`/`false`, default: `false`).
+    - `INSTINCT_PERCEPTIVE_PLAY_MOTION_PATH`: optional play-only motion folder override.
+    - `INSTINCT_PERCEPTIVE_PLAY_STUB_SAMPLING_STRATEGY`: play stub sampling strategy (default: `independent`).
+    - `INSTINCT_PERCEPTIVE_PLAY_MOTION_BIN_LENGTH_S`: play motion bin length (`auto`/`none`/float, default: `auto`).
+    - `INSTINCT_PERCEPTIVE_PLAY_FORCE_PLANE`: force play terrain to plane (`true`/`false`, default: `false`).
 
 2. Train the policy:
 ```bash
