@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import signal
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
+import torch.distributed as dist
 import tyro
 from instinct_rl.runners import OnPolicyRunner
 
@@ -35,6 +37,7 @@ from instinct_mjlab.tasks.registry import (
 from instinct_mjlab.envs import InstinctRlEnv
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
+from mjlab.utils.gpu import select_gpus
 from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
@@ -69,6 +72,7 @@ class TrainConfig:
   viewer: Literal["none", "native"] = "none"
   viewer_fps: float = 60.0
   gpu_ids: list[int] | Literal["all"] | None = None
+  torchrunx_log_dir: str | None = None
 
   @staticmethod
   def from_task(task_id: str) -> "TrainConfig":
@@ -91,6 +95,7 @@ class TrainCliConfig:
   viewer: Literal["none", "native"] = "none"
   viewer_fps: float = 60.0
   gpu_ids: list[int] | Literal["all"] | None = None
+  torchrunx_log_dir: str | None = None
 
 
 def _parse_cli_literal(raw: str) -> Any:
@@ -242,6 +247,36 @@ def _resolve_device(cfg: TrainConfig) -> str:
   return "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
+def _parse_cuda_device_index(device: str) -> int:
+  if not device.startswith("cuda"):
+    return 0
+  if ":" not in device:
+    return 0
+  try:
+    return int(device.split(":", 1)[1])
+  except ValueError:
+    return 0
+
+
+def _resolve_distributed_runtime(
+  cfg: TrainConfig,
+) -> tuple[str, int, int, int, bool]:
+  local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+  rank = int(os.environ.get("RANK", "0"))
+  world_size = int(os.environ.get("WORLD_SIZE", "1"))
+  is_distributed = world_size > 1
+  if is_distributed:
+    device = f"cuda:{local_rank}"
+    seed = cfg.agent.seed + local_rank
+  else:
+    if cfg.gpu_ids is not None and os.environ.get("CUDA_VISIBLE_DEVICES", "") != "":
+      device = "cuda:0"
+    else:
+      device = _resolve_device(cfg)
+    seed = cfg.agent.seed
+  return device, seed, rank, world_size, is_distributed
+
+
 def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   log_dir = log_dir.expanduser().resolve()
 
@@ -251,11 +286,18 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
       "  pip install -e ../mjlab\n"
       "  pip install -e ../instinct_rl"
     )
-  if cfg.viewer == "native":
+  device, seed, rank, world_size, is_distributed = _resolve_distributed_runtime(cfg)
+
+  if device.startswith("cuda"):
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(_parse_cuda_device_index(device))
+
+  viewer_enabled = cfg.viewer == "native" and rank == 0
+  video_enabled = cfg.video and rank == 0
+  if viewer_enabled:
     os.environ["MUJOCO_GL"] = "glfw"
   else:
     os.environ.setdefault("MUJOCO_GL", "egl")
-  if cfg.viewer == "native":
+  if viewer_enabled:
     has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
     if not has_display:
       raise RuntimeError(
@@ -264,29 +306,40 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
       )
   configure_torch_backends()
 
-  device = _resolve_device(cfg)
+  if is_distributed and not dist.is_initialized():
+    dist.init_process_group(
+      backend="nccl",
+      rank=rank,
+      world_size=world_size,
+    )
+
   if device.startswith("cpu"):
     raise ValueError(
       "The current instinct_rl training pipeline requires CUDA runtime stats. "
       "Use a GPU device, e.g. `--device cuda:0`."
     )
   cfg.agent.device = device
-  cfg.env.seed = cfg.agent.seed
+  cfg.agent.seed = seed
+  cfg.env.seed = seed
   if cfg.num_envs is not None:
     cfg.env.scene.num_envs = cfg.num_envs
 
   registry_name = _resolve_tracking_motion(task_id, cfg)
 
-  print(f"[INFO] Task={task_id}, device={device}, num_envs={cfg.env.scene.num_envs}")
-  print(f"[INFO] Logging to: {log_dir}")
+  print(
+    f"[INFO] Task={task_id}, device={device}, seed={seed}, "
+    f"num_envs={cfg.env.scene.num_envs}, rank={rank}/{world_size}"
+  )
+  if rank == 0:
+    print(f"[INFO] Logging to: {log_dir}")
 
   env = InstinctRlEnv(
     cfg=cfg.env,
     device=device,
-    render_mode="rgb_array" if cfg.video else None,
+    render_mode="rgb_array" if video_enabled else None,
   )
 
-  if cfg.video:
+  if video_enabled:
     env = VideoRecorder(
       env,
       video_folder=log_dir / "videos" / "train",
@@ -303,7 +356,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   )
 
   train_viewer = None
-  if cfg.viewer == "native":
+  if viewer_enabled:
     def _viewer_policy(_obs: torch.Tensor) -> torch.Tensor:
       return torch.zeros(
         (vec_env.num_envs, vec_env.num_actions),
@@ -365,13 +418,14 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     print(f"[INFO] Resuming from checkpoint: {resume_path}")
     runner.load(str(resume_path))
 
-  dump_yaml(log_dir / "params" / "env.yaml", _to_yaml_data(cfg.env))
-  dump_yaml(log_dir / "params" / "agent.yaml", _to_yaml_data(cfg.agent))
-  if registry_name is not None:
-    dump_yaml(
-      log_dir / "params" / "registry.yaml",
-      {"registry_name": registry_name},
-    )
+  if rank == 0:
+    dump_yaml(log_dir / "params" / "env.yaml", _to_yaml_data(cfg.env))
+    dump_yaml(log_dir / "params" / "agent.yaml", _to_yaml_data(cfg.agent))
+    if registry_name is not None:
+      dump_yaml(
+        log_dir / "params" / "registry.yaml",
+        {"registry_name": registry_name},
+      )
   if train_viewer is not None:
     runner_rollout_step = runner.rollout_step
 
@@ -416,6 +470,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     if train_viewer is not None:
       train_viewer.close()
     vec_env.close()
+    if dist.is_initialized():
+      dist.destroy_process_group()
 
 
 def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
@@ -425,7 +481,40 @@ def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
   if args.agent.run_name:
     log_dir_name += f"_{args.agent.run_name}"
   log_dir = log_root_path / log_dir_name
-  run_train(task_id=task_id, cfg=args, log_dir=log_dir)
+
+  if args.gpu_ids is None:
+    run_train(task_id=task_id, cfg=args, log_dir=log_dir)
+    return
+
+  selected_gpus, num_gpus = select_gpus(args.gpu_ids)
+  if selected_gpus is None or num_gpus == 0:
+    raise ValueError(
+      "No CUDA GPUs were selected. "
+      "Provide valid --gpu-ids (e.g. --gpu-ids all or --gpu-ids [0,1])."
+    )
+
+  os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(gpu_id) for gpu_id in selected_gpus)
+
+  if num_gpus <= 1:
+    run_train(task_id=task_id, cfg=args, log_dir=log_dir)
+    return
+
+  import torchrunx
+
+  logging.basicConfig(level=logging.INFO)
+  if "TORCHRUNX_LOG_DIR" not in os.environ:
+    if args.torchrunx_log_dir is not None:
+      os.environ["TORCHRUNX_LOG_DIR"] = args.torchrunx_log_dir
+    else:
+      os.environ["TORCHRUNX_LOG_DIR"] = str(log_dir / "torchrunx")
+
+  print(f"[INFO] Launching multi-GPU training with {num_gpus} GPUs.")
+  torchrunx.Launcher(
+    hostnames=["localhost"],
+    workers_per_host=num_gpus,
+    backend=None,
+    copy_env_vars=torchrunx.DEFAULT_ENV_VARS_FOR_COPY + ("MUJOCO*",),
+  ).run(run_train, task_id, args, log_dir)
 
 
 def main() -> None:
@@ -458,6 +547,7 @@ def main() -> None:
     viewer=cli_cfg.viewer,
     viewer_fps=cli_cfg.viewer_fps,
     gpu_ids=cli_cfg.gpu_ids,
+    torchrunx_log_dir=cli_cfg.torchrunx_log_dir,
   )
   _apply_dot_overrides(args, dot_override_args)
   launch_training(task_id=chosen_task, args=args)

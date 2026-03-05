@@ -127,18 +127,14 @@ def edit_spec_with_scene_visual_style(
   spec.visual.headlight.diffuse[:] = style_cfg.headlight_diffuse
   spec.visual.headlight.specular[:] = style_cfg.headlight_specular
 
-  terrain_body = None
-  for body in spec.bodies:
-    if body.name == terrain_body_name:
-      terrain_body = body
-      break
-  if terrain_body is None:
-    return
+  terrain_body = next(
+    body for body in spec.bodies if body.name == terrain_body_name
+  )
 
   for geom in terrain_body.geoms:
     if preserve_collision_rgba:
-      contype = int(getattr(geom, "contype", 1))
-      conaffinity = int(getattr(geom, "conaffinity", 1))
+      contype = int(geom.contype)
+      conaffinity = int(geom.conaffinity)
       if contype != 0 or conaffinity != 0:
         continue
     geom.material = ground_material_name

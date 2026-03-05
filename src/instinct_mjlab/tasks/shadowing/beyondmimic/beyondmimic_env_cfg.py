@@ -60,7 +60,6 @@ _UNDESIRED_CONTACT_BODY_NAMES = (
 
 def _edit_beyondmimic_scene_spec(spec: mujoco.MjSpec) -> None:
     """Apply skybox and ground material to the scene spec."""
-    skybox_texture_name = "beyondmimic_skybox"
     ground_texture_name = "beyondmimic_groundplane"
     ground_material_name = "beyondmimic_groundplane"
 
@@ -72,27 +71,16 @@ def _edit_beyondmimic_scene_spec(spec: mujoco.MjSpec) -> None:
     ground_rgb2 = (0.88, 0.88, 0.88)
     ground_mark_rgb = (0.80, 0.80, 0.80)
 
-    existing_skybox = None
-    for tex in spec.textures:
-        if tex.type == mujoco.mjtTexture.mjTEXTURE_SKYBOX:
-            existing_skybox = tex
-            break
-    if existing_skybox is not None:
-        existing_skybox.builtin = mujoco.mjtBuiltin.mjBUILTIN_GRADIENT
-        existing_skybox.rgb1[:] = sky_rgb_top
-        existing_skybox.rgb2[:] = sky_rgb_horizon
-        existing_skybox.width = 512
-        existing_skybox.height = 3072
-    else:
-        TextureCfg(
-            name=skybox_texture_name,
-            type="skybox",
-            builtin="gradient",
-            rgb1=sky_rgb_top,
-            rgb2=sky_rgb_horizon,
-            width=512,
-            height=3072,
-        ).edit_spec(spec)
+    existing_skybox = next(
+        tex
+        for tex in spec.textures
+        if tex.type == mujoco.mjtTexture.mjTEXTURE_SKYBOX
+    )
+    existing_skybox.builtin = mujoco.mjtBuiltin.mjBUILTIN_GRADIENT
+    existing_skybox.rgb1[:] = sky_rgb_top
+    existing_skybox.rgb2[:] = sky_rgb_horizon
+    existing_skybox.width = 512
+    existing_skybox.height = 3072
 
     TextureCfg(
         name=ground_texture_name,
@@ -136,28 +124,33 @@ class BeyondMimicSceneCfg(InteractiveSceneCfg):
         visual_material=None,
     ))
 
-    sensors: tuple[SensorCfg, ...] = field(default_factory=lambda: make_beyondmimic_scene_sensors())
+    sensors: tuple[SensorCfg, ...] = field(default_factory=lambda: _make_beyondmimic_base_scene_sensors())
 
     def __post_init__(self):
-        if self.spec_fn is None:
-            self.spec_fn = _edit_beyondmimic_scene_spec
+        self.spec_fn = _edit_beyondmimic_scene_spec
 
 
 def make_beyondmimic_scene_entities(
     *,
-    robot: EntityCfg | None = None,
-    robot_reference: EntityCfg | None = None,
+    robot: EntityCfg,
 ) -> dict[str, EntityCfg]:
     """Build BeyondMimic scene entities without bridge fields."""
     # robots
     # robot reference articulation
     # motion reference is configured as a sensor cfg ("motion_reference").
-    entities: dict[str, EntityCfg] = {}
-    if robot is not None:
-        entities["robot"] = robot
-    if robot_reference is not None:
-        entities["robot_reference"] = robot_reference
-    return entities
+    return {"robot": robot}
+
+
+def make_beyondmimic_scene_entities_with_reference(
+    *,
+    robot: EntityCfg,
+    robot_reference: EntityCfg,
+) -> dict[str, EntityCfg]:
+    """Build BeyondMimic scene entities for play/debug with reference robot."""
+    return {
+        "robot": robot,
+        "robot_reference": robot_reference,
+    }
 
 
 def _make_beyondmimic_undesired_contact_sensor_cfg() -> ContactSensorCfg:
@@ -176,16 +169,17 @@ def _make_beyondmimic_undesired_contact_sensor_cfg() -> ContactSensorCfg:
     )
 
 
+def _make_beyondmimic_base_scene_sensors() -> tuple[SensorCfg, ...]:
+    return (_make_beyondmimic_undesired_contact_sensor_cfg(),)
+
+
 def make_beyondmimic_scene_sensors(
     *,
-    motion_reference: MotionReferenceManagerCfg | None = None,
+    motion_reference: MotionReferenceManagerCfg,
 ) -> tuple[SensorCfg, ...]:
     """Build BeyondMimic scene sensors without bridge fields."""
     # lights are applied in _edit_beyondmimic_scene_spec.
-    sensor_list: list[SensorCfg] = [_make_beyondmimic_undesired_contact_sensor_cfg()]
-    if motion_reference is not None:
-        sensor_list.append(motion_reference)
-    return tuple(sensor_list)
+    return _make_beyondmimic_base_scene_sensors() + (motion_reference,)
 
 
 def make_beyondmimic_commands() -> dict[str, instinct_mdp.ShadowingCommandBaseCfg]:

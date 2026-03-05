@@ -133,8 +133,8 @@ def _make_motion_reference_cfg(*, debug_vis: bool) -> MotionReferenceManagerCfg:
 
 
 def _make_scene_cfg(*, play: bool, motion_reference_cfg: MotionReferenceManagerCfg) -> SceneCfg:
-    robot_reference = deepcopy(G1_CFG) if play and motion_reference_cfg.reference_entity_name is not None else None
-    if robot_reference is not None:
+    if play:
+        robot_reference = deepcopy(G1_CFG)
         # Keep reference robot visible but remove all physical contacts to avoid launch/jitter artifacts.
         robot_reference.collisions = (
             CollisionCfg(
@@ -143,11 +143,14 @@ def _make_scene_cfg(*, play: bool, motion_reference_cfg: MotionReferenceManagerC
                 conaffinity=0,
             ),
         )
-
-    entities = beyondmimic_cfg.make_beyondmimic_scene_entities(
-        robot=deepcopy(G1_CFG),
-        robot_reference=robot_reference,
-    )
+        entities = beyondmimic_cfg.make_beyondmimic_scene_entities_with_reference(
+            robot=deepcopy(G1_CFG),
+            robot_reference=robot_reference,
+        )
+    else:
+        entities = beyondmimic_cfg.make_beyondmimic_scene_entities(
+            robot=deepcopy(G1_CFG),
+        )
     sensors = beyondmimic_cfg.make_beyondmimic_scene_sensors(
         motion_reference=motion_reference_cfg,
     )
@@ -595,8 +598,6 @@ def _apply_play_overrides(cfg: InstinctLabRLEnvCfg, motion_reference_cfg: Motion
 
     # enable print_reason option in the termination terms
     for term in cfg.terminations.values():
-        if term is None:
-            continue
         if "print_reason" in term.params:
             term.params["print_reason"] = True
 
@@ -614,13 +615,13 @@ def _build_run_name(cfg: InstinctLabRLEnvCfg) -> str:
             "G1BeyondMimic",
             (
                 "_linVelObs"
-                if actor_terms.get("base_lin_vel", None) is not None
+                if "base_lin_vel" in actor_terms
                 and actor_terms["base_lin_vel"].scale != 0.0
                 else ""
             ),
             f"_{MOTION_NAME}",
-            ("_noPush" if cfg.events.get("push_robot", None) is None else ""),
-            ("_noContactPenalty" if cfg.rewards.get("undesired_contacts", None) is None else ""),
+            ("_noPush" if cfg.events["push_robot"] is None else ""),
+            ("_noContactPenalty" if cfg.rewards["undesired_contacts"] is None else ""),
             "_GmrMotion",
         ]
     )

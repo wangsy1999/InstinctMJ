@@ -1161,8 +1161,6 @@ def set_parkour_scene_visual_style(cfg: ManagerBasedRlEnvCfg) -> None:
 def _soften_parkour_terrain_lights(spec) -> None:
   """Reduce terrain light intensity to avoid overexposed ground appearance."""
   terrain_body = spec.body("terrain")
-  if terrain_body is None:
-    return
 
   for light in terrain_body.lights:
     light.castshadow = False

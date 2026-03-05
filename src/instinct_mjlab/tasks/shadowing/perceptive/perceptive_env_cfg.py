@@ -68,7 +68,6 @@ def get_motion_matched_subterrain_cfg(sub_terrains: dict[str, object]) -> Motion
 
 def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
     """Apply skybox and terrain material to the scene spec."""
-    skybox_texture_name = "perceptive_skybox"
     ground_texture_name = "perceptive_groundplane"
     ground_material_name = "perceptive_groundplane"
 
@@ -87,6 +86,7 @@ def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
         if tex.type == mujoco.mjtTexture.mjTEXTURE_SKYBOX:
             existing_skybox = tex
             break
+
     if existing_skybox is not None:
         existing_skybox.builtin = mujoco.mjtBuiltin.mjBUILTIN_GRADIENT
         existing_skybox.rgb1[:] = sky_rgb_top
@@ -95,7 +95,7 @@ def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
         existing_skybox.height = 3072
     else:
         TextureCfg(
-            name=skybox_texture_name,
+            name="perceptive_skybox",
             type="skybox",
             builtin="gradient",
             rgb1=sky_rgb_top,
@@ -131,25 +131,22 @@ def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
     spec.visual.quality.shadowsize = 8192
 
     terrain_body = spec.body("terrain")
-    if terrain_body is not None:
-        for light in terrain_body.lights:
-            # Soft terrain fill light: brighter than pure headlight mode while
-            # avoiding hard specular highlights.
-            light.castshadow = False
-            light.ambient[:] = (0.12, 0.12, 0.12)
-            light.diffuse[:] = (0.24, 0.24, 0.24)
-            light.specular[:] = (0.0, 0.0, 0.0)
-        for geom in terrain_body.geoms:
-            geom.material = ground_material_name
-            geom.rgba[:] = (ground_rgb1[0], ground_rgb1[1], ground_rgb1[2], 1.0)
+    for light in terrain_body.lights:
+        # Soft terrain fill light: brighter than pure headlight mode while
+        # avoiding hard specular highlights.
+        light.castshadow = False
+        light.ambient[:] = (0.12, 0.12, 0.12)
+        light.diffuse[:] = (0.24, 0.24, 0.24)
+        light.specular[:] = (0.0, 0.0, 0.0)
+    for geom in terrain_body.geoms:
+        geom.material = ground_material_name
+        geom.rgba[:] = (ground_rgb1[0], ground_rgb1[1], ground_rgb1[2], 1.0)
 
     # Ensure reference robot never participates in contacts.
     # Some G1 XML geoms are unnamed, so name-pattern CollisionCfg cannot reliably
     # disable all reference collisions in this task.
     for geom in spec.geoms:
         parent = geom.parent
-        if parent is None:
-            continue
         body_name = parent.name or ""
         # Handle both direct entity names ("robot_reference/...") and nested
         # names that include additional namespace prefixes (".../robot_reference/...").
@@ -159,8 +156,8 @@ def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
             or "/robot_reference/" in body_name
         )
         if is_reference_body:
-            original_contype = int(getattr(geom, "contype", 1))
-            original_conaffinity = int(getattr(geom, "conaffinity", 1))
+            original_contype = int(geom.contype)
+            original_conaffinity = int(geom.conaffinity)
             collision_enabled = (original_contype != 0) or (original_conaffinity != 0)
             geom_name = (geom.name or "").lower()
             collision_name_hint = ("collision" in geom_name) or ("_col" in geom_name)
@@ -224,29 +221,34 @@ class PerceptiveShadowingSceneCfg(InteractiveSceneCfg):
     ))
 
     # sensors
-    sensors: tuple[SensorCfg, ...] = field(default_factory=lambda: make_perceptive_scene_sensors())
+    sensors: tuple[SensorCfg, ...] = field(default_factory=lambda: _make_perceptive_base_scene_sensors())
 
 
     def __post_init__(self):
-        if self.spec_fn is None:
-            self.spec_fn = _edit_perceptive_scene_spec
+        self.spec_fn = _edit_perceptive_scene_spec
 
 
 def make_perceptive_scene_entities(
     *,
-    robot: EntityCfg | None = None,
-    robot_reference: EntityCfg | None = None,
+    robot: EntityCfg,
 ) -> dict[str, EntityCfg]:
     """Build perceptive scene entities without bridge fields."""
     # robots
     # robot reference articulation
     # motion reference is configured as a sensor cfg ("motion_reference").
-    entities: dict[str, EntityCfg] = {}
-    if robot is not None:
-        entities["robot"] = robot
-    if robot_reference is not None:
-        entities["robot_reference"] = robot_reference
-    return entities
+    return {"robot": robot}
+
+
+def make_perceptive_scene_entities_with_reference(
+    *,
+    robot: EntityCfg,
+    robot_reference: EntityCfg,
+) -> dict[str, EntityCfg]:
+    """Build perceptive scene entities for play/debug with reference robot."""
+    return {
+        "robot": robot,
+        "robot_reference": robot_reference,
+    }
 
 
 def _make_perceptive_height_scanner_sensor_cfg() -> RayCastSensorCfg:
@@ -339,20 +341,22 @@ def _make_perceptive_contact_forces_sensor_cfg() -> ContactSensorCfg:
     )
 
 
-def make_perceptive_scene_sensors(
-    *,
-    motion_reference: MotionReferenceManagerCfg | None = None,
-    include_height_scanner: bool = True,
-) -> tuple[SensorCfg, ...]:
-    """Build perceptive scene sensors without bridge fields."""
-    # lights are applied in _edit_perceptive_scene_spec.
+def _make_perceptive_base_scene_sensors(*, include_height_scanner: bool = True) -> tuple[SensorCfg, ...]:
     sensor_list: list[SensorCfg] = [_make_perceptive_contact_forces_sensor_cfg()]
     if include_height_scanner:
         sensor_list.append(_make_perceptive_height_scanner_sensor_cfg())
     sensor_list.append(_make_perceptive_camera_sensor_cfg())
-    if motion_reference is not None:
-        sensor_list.append(motion_reference)
     return tuple(sensor_list)
+
+
+def make_perceptive_scene_sensors(
+    *,
+    motion_reference: MotionReferenceManagerCfg,
+    include_height_scanner: bool = True,
+) -> tuple[SensorCfg, ...]:
+    """Build perceptive scene sensors without bridge fields."""
+    # lights are applied in _edit_perceptive_scene_spec.
+    return _make_perceptive_base_scene_sensors(include_height_scanner=include_height_scanner) + (motion_reference,)
 
 
 def get_scene_entity_cfg(scene: InteractiveSceneCfg, entity_name: str) -> EntityCfg:
@@ -365,7 +369,7 @@ def get_scene_sensor_cfg(scene: InteractiveSceneCfg, sensor_name: str) -> Sensor
     return next(
         sensor_cfg
         for sensor_cfg in scene.sensors
-        if getattr(sensor_cfg, "name", None) == sensor_name
+        if sensor_cfg.name == sensor_name
     )
 
 
@@ -374,7 +378,7 @@ def remove_scene_sensor_cfg(scene: InteractiveSceneCfg, sensor_name: str) -> Non
     scene.sensors = tuple(
         sensor_cfg
         for sensor_cfg in scene.sensors
-        if getattr(sensor_cfg, "name", None) != sensor_name
+        if sensor_cfg.name != sensor_name
     )
 
 

@@ -290,7 +290,7 @@ class G1PerceptiveVaeEnvCfg_PLAY(G1PerceptiveVaeEnvCfg):
     scene: perceptual_cfg.PerceptiveShadowingSceneCfg = field(default_factory=lambda: perceptual_cfg.PerceptiveShadowingSceneCfg(
         num_envs=1,
         env_spacing=2.5,
-        entities=perceptual_cfg.make_perceptive_scene_entities(
+        entities=perceptual_cfg.make_perceptive_scene_entities_with_reference(
             robot=deepcopy(G1_CFG),
             robot_reference=deepcopy(G1_CFG),
         ),

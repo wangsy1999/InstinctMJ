@@ -27,7 +27,7 @@ def track_lin_vel_xy_exp(
     torch.square(command[:, :2] - asset.data.root_link_lin_vel_b[:, :2]),
     dim=1,
   )
-  return torch.exp(-lin_vel_error / max(std, 1e-6) ** 2)
+  return torch.exp(-lin_vel_error / std**2)
 
 
 def track_ang_vel_z_exp(
@@ -40,7 +40,7 @@ def track_ang_vel_z_exp(
   asset: Entity = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
   ang_vel_error = torch.square(command[:, 2] - asset.data.root_link_ang_vel_b[:, 2])
-  return torch.exp(-ang_vel_error / max(std, 1e-6) ** 2)
+  return torch.exp(-ang_vel_error / std**2)
 
 
 def heading_error(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
@@ -206,12 +206,6 @@ def feet_at_plane(
   asset: Entity = env.scene[asset_cfg.name]
   body_link_pos_w = asset.data.body_link_pos_w
 
-  body_ids = asset_cfg.body_ids
-  if isinstance(body_ids, slice):
-    body_ids = list(range(body_link_pos_w.shape[1]))[body_ids]
-  else:
-    body_ids = list(body_ids)
-
   contact_sensor: ContactSensor = env.scene[contact_sensor_name]
   is_contact = (
     torch.max(torch.linalg.vector_norm(contact_sensor.data.force_history, dim=-1), dim=2)[0]
@@ -225,8 +219,8 @@ def feet_at_plane(
   left_hit_z = torch.where(left_sensor.data.distances < 0.0, 0.0, left_hit_z)
   right_hit_z = torch.where(right_sensor.data.distances < 0.0, 0.0, right_hit_z)
 
-  left_height = body_link_pos_w[:, body_ids[0], 2].unsqueeze(-1)
-  right_height = body_link_pos_w[:, body_ids[1], 2].unsqueeze(-1)
+  left_height = body_link_pos_w[:, asset_cfg.body_ids[0], 2].unsqueeze(-1)
+  right_height = body_link_pos_w[:, asset_cfg.body_ids[1], 2].unsqueeze(-1)
 
   left_contact = is_contact[:, 0:1].float()
   right_contact = is_contact[:, 1:2].float()
@@ -291,14 +285,11 @@ def motors_power_square(
       base_actuator = actuator.base_actuator
       target_ids = base_actuator.target_ids
       stiffness = base_actuator.cfg.stiffness
-      if torch.is_tensor(stiffness):
-        power_j[:, target_ids] /= stiffness.to(device=power_j.device, dtype=power_j.dtype)
-      else:
-        power_j[:, target_ids] /= float(stiffness)
+      power_j[:, target_ids] /= torch.as_tensor(stiffness, device=power_j.device, dtype=power_j.dtype)
 
   power_j = power_j[:, asset_cfg.joint_ids]
   power = torch.sum(torch.square(power_j), dim=-1)
-  if normalize_by_num_joints and power_j.shape[-1] > 0:
+  if normalize_by_num_joints:
     power = power / power_j.shape[-1]
   return power
 

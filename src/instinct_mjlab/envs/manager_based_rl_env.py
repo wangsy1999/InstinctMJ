@@ -148,11 +148,11 @@ class InstinctRlEnv(ManagerBasedRlEnv):
     if terrain is not None:
       terrain.debug_vis(visualizer)
 
-  def _reset_idx(self, env_ids: Sequence[int] | torch.Tensor | None = None) -> None:
-    if env_ids is None:
-      env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.int64)
+  def _reset_idx(self, env_ids: Sequence[int] | torch.Tensor) -> None:
     if isinstance(env_ids, Sequence):
       env_ids = torch.as_tensor(env_ids, device=self.device, dtype=torch.int64)
+    else:
+      env_ids = env_ids.to(device=self.device, dtype=torch.int64)
 
     monitor_infos = self.monitor_manager.reset(env_ids, is_episode=True)
 

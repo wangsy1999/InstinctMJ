@@ -148,14 +148,11 @@ def _resolve_update_period_steps(params: dict, env) -> int:
   if "update_period_steps" in params:
     return max(int(params["update_period_steps"]), 1)
 
-  update_period_s = params.get("update_period_s")
-  if update_period_s is None:
+  if "update_period_s" not in params:
     return 1
 
-  step_dt = float(getattr(env, "step_dt", 0.0) or 0.0)
-  if step_dt <= 0.0:
-    return 1
-
+  update_period_s = float(params["update_period_s"])
+  step_dt = float(env.step_dt)
   return max(int(round(float(update_period_s) / step_dt)), 1)
 
 
@@ -355,7 +352,14 @@ class _PerceptiveRaycastNoisedBase(ManagerTermBase):
     self.output_width = int(params.get("output_width", 32))
     self.update_period_steps = _resolve_update_period_steps(params=params, env=env)
 
-    self._frame_cache: torch.Tensor | None = None
+    self._frame_cache = torch.zeros(
+      self.num_envs,
+      1,
+      self.output_height,
+      self.output_width,
+      device=self.device,
+      dtype=torch.float32,
+    )
     self._frame_initialized = torch.zeros(
       self.num_envs, dtype=torch.bool, device=self.device
     )
@@ -367,14 +371,12 @@ class _PerceptiveRaycastNoisedBase(ManagerTermBase):
     if env_ids is None:
       self._frame_initialized[:] = False
       self._frame_step_count.zero_()
-      if self._frame_cache is not None:
-        self._frame_cache.zero_()
+      self._frame_cache.zero_()
       return
 
     self._frame_initialized[env_ids] = False
     self._frame_step_count[env_ids] = 0
-    if self._frame_cache is not None:
-      self._frame_cache[env_ids] = 0.0
+    self._frame_cache[env_ids] = 0.0
 
   def _compute_depth_image(self, env) -> torch.Tensor:
     return perceptive_depth_image(
@@ -401,14 +403,10 @@ class _PerceptiveRaycastNoisedBase(ManagerTermBase):
 
     if torch.any(refresh):
       image = self._compute_depth_image(env)
-      if self._frame_cache is None:
-        self._frame_cache = torch.zeros_like(image)
       self._frame_cache[refresh] = image[refresh]
       self._frame_initialized[refresh] = True
 
     self._frame_step_count += 1
-    if self._frame_cache is None:
-      raise RuntimeError("Depth frame cache is not initialized.")
     return self._frame_cache
 
 
@@ -457,15 +455,20 @@ class PerceptiveRaycastNoisedHistory(_PerceptiveRaycastNoisedBase):
     self.history_length = max(int(params.get("history_length", 10)), 1)
     self.history_skip_frames = max(int(params.get("history_skip_frames", 0)), 0)
 
-    self._history: torch.Tensor | None = None
+    self._history = torch.zeros(
+      self.num_envs,
+      self.history_length,
+      self.output_height,
+      self.output_width,
+      device=self.device,
+      dtype=torch.float32,
+    )
     self._history_initialized = torch.zeros(
       self.num_envs, dtype=torch.bool, device=self.device
     )
 
   def reset(self, env_ids: torch.Tensor | slice | None) -> None:
     super().reset(env_ids)
-    if self._history is None:
-      return
     if env_ids is None:
       self._history_initialized[:] = False
       self._history.zero_()
@@ -506,16 +509,6 @@ class PerceptiveRaycastNoisedHistory(_PerceptiveRaycastNoisedBase):
 
     image = self._sample_depth_image(env)
     frame = image.squeeze(1)
-
-    if self._history is None:
-      self._history = torch.zeros(
-        self.num_envs,
-        self.history_length,
-        frame.shape[-2],
-        frame.shape[-1],
-        device=frame.device,
-        dtype=frame.dtype,
-      )
 
     initialized_env_ids = torch.where(self._history_initialized)[0]
     if initialized_env_ids.numel() > 0:

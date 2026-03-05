@@ -58,7 +58,6 @@ _SELF_COLLISION_SENSOR_NAME = "self_collision"
 
 def _edit_shadowing_scene_spec(spec: mujoco.MjSpec) -> None:
     """Apply skybox and white-ish ground material for native viewer play."""
-    skybox_texture_name = "whole_body_skybox"
     ground_texture_name = "whole_body_groundplane"
     ground_material_name = "whole_body_groundplane"
 
@@ -68,27 +67,16 @@ def _edit_shadowing_scene_spec(spec: mujoco.MjSpec) -> None:
     ground_rgb2 = (0.88, 0.88, 0.88)
     ground_mark_rgb = (0.80, 0.80, 0.80)
 
-    existing_skybox = None
-    for tex in spec.textures:
-        if tex.type == mujoco.mjtTexture.mjTEXTURE_SKYBOX:
-            existing_skybox = tex
-            break
-    if existing_skybox is not None:
-        existing_skybox.builtin = mujoco.mjtBuiltin.mjBUILTIN_GRADIENT
-        existing_skybox.rgb1[:] = sky_rgb_top
-        existing_skybox.rgb2[:] = sky_rgb_horizon
-        existing_skybox.width = 512
-        existing_skybox.height = 3072
-    else:
-        TextureCfg(
-            name=skybox_texture_name,
-            type="skybox",
-            builtin="gradient",
-            rgb1=sky_rgb_top,
-            rgb2=sky_rgb_horizon,
-            width=512,
-            height=3072,
-        ).edit_spec(spec)
+    existing_skybox = next(
+        tex
+        for tex in spec.textures
+        if tex.type == mujoco.mjtTexture.mjTEXTURE_SKYBOX
+    )
+    existing_skybox.builtin = mujoco.mjtBuiltin.mjBUILTIN_GRADIENT
+    existing_skybox.rgb1[:] = sky_rgb_top
+    existing_skybox.rgb2[:] = sky_rgb_horizon
+    existing_skybox.width = 512
+    existing_skybox.height = 3072
 
     TextureCfg(
         name=ground_texture_name,
@@ -400,7 +388,7 @@ def _make_scene_cfg(*, play: bool, motion_reference_cfg: MotionReferenceManagerC
     entities = {
         "robot": deepcopy(G1_CFG),
     }
-    if play and motion_reference_cfg.reference_entity_name is not None:
+    if play:
         entities["robot_reference"] = deepcopy(G1_CFG)
 
     return SceneCfg(
@@ -872,8 +860,6 @@ def _apply_play_overrides(cfg: ManagerBasedRlEnvCfg, motion_reference_cfg: Motio
 
     # enable print_reason option in the termination terms
     for term in cfg.terminations.values():
-        if term is None:
-            continue
         if "print_reason" in term.params:
             term.params["print_reason"] = True
     # self.episode_length_s = 10.0

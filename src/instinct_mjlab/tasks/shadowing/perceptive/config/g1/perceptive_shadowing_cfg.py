@@ -31,9 +31,7 @@ G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
 
 
 def _env_flag(name: str, *, default: bool = False) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
+    value = os.environ.get(name, "true" if default else "false")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -173,11 +171,8 @@ class G1PerceptiveShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
         # Set contact/constraint capacities explicitly for perceptive shadowing.
         self.sim.njmax = 700
         self.sim.nconmax = 128
-        # Use sparse Jacobian explicitly to avoid dense Jacobian unsupported path for nv > 60 in mjwarp.
         self.sim.mujoco.jacobian = "sparse"
-        # Raise CCD iterations for perceptive terrain contacts (default 50 can trigger EPA horizon warnings).
         self.sim.mujoco.ccd_iterations = 128
-        # Mirror parkour CCD mode for dense terrain contact pairs.
         self.sim.mujoco.multiccd = False
 
         MOTION_NAME = list(motion_reference_cfg.motion_buffers.keys())[0]
@@ -220,7 +215,7 @@ class G1PerceptiveShadowingEnvCfg_PLAY(G1PerceptiveShadowingEnvCfg):
     scene: perceptual_cfg.PerceptiveShadowingSceneCfg = field(default_factory=lambda: perceptual_cfg.PerceptiveShadowingSceneCfg(
         num_envs=1,
         env_spacing=2.5,
-        entities=perceptual_cfg.make_perceptive_scene_entities(
+        entities=perceptual_cfg.make_perceptive_scene_entities_with_reference(
             robot=deepcopy(G1_CFG),
             robot_reference=deepcopy(G1_CFG),
         ),
@@ -252,10 +247,12 @@ class G1PerceptiveShadowingEnvCfg_PLAY(G1PerceptiveShadowingEnvCfg):
         play_stub_sampling_strategy = os.environ.get(
             "INSTINCT_PERCEPTIVE_PLAY_STUB_SAMPLING_STRATEGY", "independent"
         ).strip()
-        motion_bin_length_override = os.environ.get("INSTINCT_PERCEPTIVE_PLAY_MOTION_BIN_LENGTH_S")
-        if motion_bin_length_override is None:
+        motion_bin_length_override = os.environ.get(
+            "INSTINCT_PERCEPTIVE_PLAY_MOTION_BIN_LENGTH_S", "auto"
+        ).strip().lower()
+        if motion_bin_length_override == "auto":
             play_motion_bin_length_s = 1.0 if play_stub_sampling_strategy == "concat_motion_bins" else None
-        elif motion_bin_length_override.strip().lower() == "none":
+        elif motion_bin_length_override == "none":
             play_motion_bin_length_s = None
         else:
             play_motion_bin_length_s = float(motion_bin_length_override)
@@ -284,9 +281,6 @@ class G1PerceptiveShadowingEnvCfg_PLAY(G1PerceptiveShadowingEnvCfg):
                 default_path=motion_buffer.path,
                 default_metadata_yaml=motion_buffer.metadata_yaml,
             )
-
-        # Use non-terrain-matching motion and plane to hack the scene.
-        if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.num_rows = 6
             self.scene.terrain.terrain_generator.num_cols = 6
         # self.scene.motion_reference.motion_buffers.pop(MOTION_NAME)

@@ -1042,7 +1042,7 @@ def undesired_contacts(
     env: ManagerBasedRLEnv,
     threshold: float,
     sensor_name: str,
-    asset_cfg: SceneEntityCfg | None = None,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold.
 
@@ -1054,8 +1054,7 @@ def undesired_contacts(
         env: The environment.
         threshold: Force threshold for contact detection.
         sensor_name: Name of the contact sensor.
-        asset_cfg: Optional SceneEntityCfg to filter specific bodies. If provided,
-            only contacts on the specified bodies are considered.
+        asset_cfg: SceneEntityCfg to select body channels from the contact sensor.
     """
     # extract the used quantities (to enable type-hinting)
     contact_sensor: ContactSensor = env.scene[sensor_name]
@@ -1063,11 +1062,7 @@ def undesired_contacts(
     force_history = contact_sensor.data.force_history
     force_norms = torch.norm(force_history, dim=-1)  # (B, N, H)
     max_force_norms = torch.max(force_norms, dim=-1)[0]  # (B, N)
-    is_contact = max_force_norms > threshold  # (B, N)
-    
-    # Filter by body_ids if asset_cfg is provided (legacy behavior)
-    if asset_cfg is not None:
-        is_contact = is_contact[:, asset_cfg.body_ids]
+    is_contact = max_force_norms[:, asset_cfg.body_ids] > threshold  # (B, N)
     
     # sum over contacts for each environment
     return torch.sum(is_contact.float(), dim=1)
