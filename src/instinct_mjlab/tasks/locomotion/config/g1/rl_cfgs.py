@@ -43,6 +43,6 @@ def g1_locomotion_instinct_rl_cfg() -> InstinctRlOnPolicyRunnerCfg:
     log_interval=10,
     experiment_name="g1_locomotion_flat",
     run_name="",
-    policy_observation_group="actor",
+    policy_observation_group="policy",
     critic_observation_group="critic",
   )

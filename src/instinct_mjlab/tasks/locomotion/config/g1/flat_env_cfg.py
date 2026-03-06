@@ -138,7 +138,7 @@ def _commands_cfg() -> dict[str, UniformVelocityCommandCfg]:
 
 
 def _observations_cfg() -> dict[str, ObsGroup]:
-  actor_terms = {
+  policy_terms = {
     "base_ang_vel": ObsTerm(func=instinct_mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2)),
     "projected_gravity": ObsTerm(
       func=instinct_mdp.projected_gravity,
@@ -159,8 +159,8 @@ def _observations_cfg() -> dict[str, ObsGroup]:
     "actions": ObsTerm(func=instinct_mdp.last_action),
   }
   return {
-    "actor": ObsGroup(
-      terms=actor_terms,
+    "policy": ObsGroup(
+      terms=policy_terms,
       enable_corruption=True,
       concatenate_terms=False,
     ),

@@ -195,7 +195,7 @@ def _commands_cfg() -> dict[str, object]:
 
 def _observations_cfg(link_of_interests: list[str]) -> dict[str, ObservationGroupCfg]:
     return {
-        "actor": ObservationGroupCfg(
+        "policy": ObservationGroupCfg(
             terms={
                 # BeyondMimic specific reference observations
                 "joint_pos_ref": ObservationTermCfg(
@@ -610,14 +610,14 @@ def _apply_play_overrides(cfg: InstinctLabRLEnvCfg, motion_reference_cfg: Motion
 
 
 def _build_run_name(cfg: InstinctLabRLEnvCfg) -> str:
-    actor_terms = cfg.observations["actor"].terms
+    policy_terms = cfg.observations["policy"].terms
     return "".join(
         [
             "G1BeyondMimic",
             (
                 "_linVelObs"
-                if "base_lin_vel" in actor_terms
-                and actor_terms["base_lin_vel"].scale != 0.0
+                if "base_lin_vel" in policy_terms
+                and policy_terms["base_lin_vel"].scale != 0.0
                 else ""
             ),
             f"_{MOTION_NAME}",

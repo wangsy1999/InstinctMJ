@@ -15,7 +15,7 @@ class InstinctRlVecEnvWrapper(VecEnv):
     self,
     env: ManagerBasedRlEnv,
     *,
-    policy_group: str = "actor",
+    policy_group: str = "policy",
     critic_group: str | None = "critic",
   ):
     self.env = env

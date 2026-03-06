@@ -54,7 +54,7 @@ def g1_beyondmimic_ppo_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
         run_name=run_name,
         resume=False,
         load_run=".*",
-        policy_observation_group="actor",
+        policy_observation_group="policy",
         critic_observation_group="critic",
     )
 

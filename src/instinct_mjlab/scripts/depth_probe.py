@@ -188,8 +188,8 @@ def run_probe(task_id: str, cfg: ProbeConfig) -> None:
 
   step_stats: list[dict[str, float | list[int] | int]] = []
   for step in range(cfg.steps):
-    actor_obs = obs["actor"]
-    depth = actor_obs.get("depth_image") if isinstance(actor_obs, dict) else None
+    policy_obs = obs["policy"]
+    depth = policy_obs.get("depth_image") if isinstance(policy_obs, dict) else None
 
     record: dict[str, float | list[int] | int] = {"step": step}
     if isinstance(depth, torch.Tensor):
@@ -211,7 +211,7 @@ def run_probe(task_id: str, cfg: ProbeConfig) -> None:
     "device": device,
     "num_envs": env_cfg.scene.num_envs,
     "steps": cfg.steps,
-    "actor_terms": list(env_cfg.observations["actor"].terms.keys()),
+    "policy_terms": list(env_cfg.observations["policy"].terms.keys()),
     "critic_terms": list(env_cfg.observations["critic"].terms.keys()),
     "records": step_stats,
   }

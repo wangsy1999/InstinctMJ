@@ -117,7 +117,7 @@ class InstinctRlOnPolicyRunnerCfg:
   load_checkpoint: str = "model_.*.pt"
   ckpt_manipulator: str | None = None
   ckpt_manipulator_kwargs: dict[str, Any] = field(default_factory=dict)
-  policy_observation_group: str = "actor"
+  policy_observation_group: str = "policy"
   critic_observation_group: str = "critic"
 
   def to_dict(self) -> dict[str, Any]:

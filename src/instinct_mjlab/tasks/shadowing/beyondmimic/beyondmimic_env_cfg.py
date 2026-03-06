@@ -299,7 +299,7 @@ def make_beyondmimic_observations() -> dict[str, ObsGroupCfg]:
     }
 
     return {
-        "actor": ObsGroupCfg(
+        "policy": ObsGroupCfg(
             terms=actor_terms,
             enable_corruption=True,
             concatenate_terms=False,
