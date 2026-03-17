@@ -13,10 +13,11 @@ Usage notes for the `InstinctMJ` parkour task family on `mjlab`.
 1. Go to `config/g1/g1_parkour_target_amp_cfg.py` and first update the local parkour dataset root:
 
    ```python
-   _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
+   _PARKOUR_DATASET_DIR = os.path.expanduser("~/your/path/to/parkour_motion_reference")
    ```
 
    `AmassMotionCfg.path` uses `_PARKOUR_DATASET_DIR` directly. If your filtered motion list is not stored as `parkour_motion_without_run.yaml` under that directory, also update `filtered_motion_selection_filepath` in the same file.
+   Keep the selected motion `.npz` files and the selection `.yaml` aligned with this same root unless you intentionally split them.
 
 2. Train the policy:
 ```bash

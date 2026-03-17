@@ -135,7 +135,7 @@ _hacked_selected_files_ = ["fightAndSports1_subject1_retargetted.npz"]
 # below to your local motion setup before training / play.
 MOTION_NAME = "LafanFight5Files"
 # NOTE: Change this preset dataset root if you use this motion selection block.
-_path_ = os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz")
+_path_ = os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct")
 _hacked_selected_files_ = [
     "fight1_subject2_retargetted.npz",
     "fight1_subject3_retargetted.npz",
@@ -147,7 +147,7 @@ _hacked_selected_files_ = [
 
 MOTION_NAME = "LafanFiltered"
 # NOTE: Change this preset dataset root if you use this motion selection block.
-_path_ = os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz")
+_path_ = os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct")
 _hacked_selected_files_ = [
     "aiming1_subject1_retargetted.npz",  # O
     "aiming1_subject4_retargetted.npz",  # O
@@ -229,7 +229,7 @@ _hacked_selected_files_ = [
 ]
 
 # MOTION_NAME = "LafanGetup2S3"
-# _path_ = os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz")
+# _path_ = os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct")
 # _hacked_selected_files_ = [
 #     "fallAndGetUp2_subject3_retargetted.npz",
 # ]
@@ -303,36 +303,36 @@ motion_reference_cfg = MotionReferenceManagerCfg(
     visualizing_robot_from="reference_frame",
     motion_buffers={
         #     "CMU_KIT": AmassMotionCfg(
-        #         path=os.path.expanduser("~/Xyk/Datasets/AMASS_CMU_KIT_retargetted_20250702"),  # type: ignore
+        #         path=os.path.expanduser("~/your/path/to/AMASS_CMU_KIT_retargetted_20250702"),  # type: ignore
         #         filtered_motion_selection_filepath=os.path.expanduser(  # type: ignore
-        #             "~/Xyk/Datasets/AMASS_selections/CMU_KIT_weighted_retargetted_20250702.yaml",
+        #             "~/your/path/to/AMASS_selections/CMU_KIT_weighted_retargetted_20250702.yaml",
         #         ),
         #     ),
         # "CMU_KIT_DanceDB_BioMotionLab": AmassMotionCfg(
-        #     path=os.path.expanduser("~/Xyk/Datasets/AMASS_CMU_KIT_DanceDB_BioMotionLab_retargetted_20250702"),  # type: ignore
+        #     path=os.path.expanduser("~/your/path/to/AMASS_CMU_KIT_DanceDB_BioMotionLab_retargetted_20250702"),  # type: ignore
         #     filtered_motion_selection_filepath=os.path.expanduser(  # type: ignore
-        #         "~/Xyk/Datasets/AMASS_selections/CMU_KIT_DanceDB_BioMotionLab_weighted_retargetted_20250702.yaml",
+        #         "~/your/path/to/AMASS_selections/CMU_KIT_DanceDB_BioMotionLab_weighted_retargetted_20250702.yaml",
         #     ),
         # ),
         # "CMU_KIT_ACCAD_DanceDB_HumanEva": AmassMotionCfg(
-        #     path=os.path.expanduser("~/Xyk/Datasets/AMASS_CMU_KIT_ACCAD_DanceDB_HumanEva_retargetted_20250702"),  # type: ignore
+        #     path=os.path.expanduser("~/your/path/to/AMASS_CMU_KIT_ACCAD_DanceDB_HumanEva_retargetted_20250702"),  # type: ignore
         #     filtered_motion_selection_filepath=os.path.expanduser(  # type: ignore
-        #         # "~/Xyk/Datasets/AMASS_selections/CMU_KIT_ACCAD_DanceDB_HumanEva_weighted_retargetted_20250702.yaml",
-        #         "~/Xyk/Datasets/AMASS_selections/CMU_KIT_ACCAD_DanceDB_HumanEva_weighted_moverange_20250724_retargetted_20250702.yaml",
+        #         # "~/your/path/to/AMASS_selections/CMU_KIT_ACCAD_DanceDB_HumanEva_weighted_retargetted_20250702.yaml",
+        #         "~/your/path/to/AMASS_selections/CMU_KIT_ACCAD_DanceDB_HumanEva_weighted_moverange_20250724_retargetted_20250702.yaml",
         #     ),
         # ),
         # "UbisoftLAFAN1_GMR": AmassMotionCfg(
-        #     path=os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz"),  # type: ignore
+        #     path=os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct"),  # type: ignore
         #     filtered_motion_selection_filepath=None,
         # ),
         MOTION_NAME: AmassMotionCfgBase(
-            # path = os.path.expanduser("~/Xyk/Datasets/AMASS_CMU_KIT_ACCAD_DanceDB_HumanEva_retargetted_20250702")
-            # path = os.path.expanduser("~/Xyk/Datasets/AMASS_SMPLX-NG_GMR_29dof_g1_torsoBase_retargetted_20250825_instinctnpz")
-            # path = os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz")
-            # path = os.path.expanduser("~/Xyk/Datasets/AMASS_SMPLX-NG_GMR_29dof_g1_torsoBase_retargetted_20250901_instinctnpz")
+            # path = os.path.expanduser("~/your/path/to/AMASS_CMU_KIT_ACCAD_DanceDB_HumanEva_retargetted_20250702")
+            # path = os.path.expanduser("~/your/path/to/AMASS_SMPLX-NG_GMR_29dof_g1_torsoBase_retargetted_20250825_instinctnpz")
+            # path = os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct")
+            # path = os.path.expanduser("~/your/path/to/AMASS_SMPLX-NG_GMR_29dof_g1_torsoBase_retargetted_20250901_instinctnpz")
             # path = _path_
             # NOTE: Change this to the active local whole-body shadowing dataset root.
-            path=os.path.expanduser("~/Xyk/Datasets/NoKov-Marslab-Motions-instinctnpz/20251016_diveroll4_single"),
+            path=os.path.expanduser("~/your/path/to/whole_body_motion_dataset"),
             retargetting_func=None,
             filtered_motion_selection_filepath=None,
             motion_start_from_middle_range=[0.0, 0.8],

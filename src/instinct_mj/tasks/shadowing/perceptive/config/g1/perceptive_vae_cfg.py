@@ -37,9 +37,10 @@ from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
 
 # NOTE: Change this to your local perceptive VAE dataset folder.
+# The folder should contain the motion files and a `metadata.yaml`.
 MOTION_FOLDER = (
-    "~/Xyk/Datasets/20251116_50cm_kneeClimbStep1"
-    # "~/Xyk/Datasets/20251116_50cm_kneeClimbStep1/20251106_diveroll4_roadRamp_noWall"
+    "~/your/path/to/20251116_50cm_kneeClimbStep1"
+    # "~/your/path/to/20251116_50cm_kneeClimbStep1/20251106_diveroll4_roadRamp_noWall"
 )
 
 

@@ -29,7 +29,8 @@ from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
 
 # NOTE: Change this to your local perceptive shadowing dataset folder.
-MOTION_FOLDER = "~/Xyk/Datasets/20251116_50cm_kneeClimbStep1"
+# The folder should contain the motion files and a `metadata.yaml`.
+MOTION_FOLDER = "~/your/path/to/20251116_50cm_kneeClimbStep1"
 
 
 @dataclass(kw_only=True)

@@ -70,9 +70,10 @@ from instinct_mj.utils.noise import CropAndResizeCfg, DepthNormalizationCfg, Gau
 
 __file_dir__ = os.path.dirname(os.path.realpath(__file__))
 # NOTE: Change this to your local parkour dataset root before training / play.
+# Keep `filtered_motion_selection_filepath` under this directory unless you point it elsewhere.
 # Example:
-# _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
-_PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
+# _PARKOUR_DATASET_DIR = os.path.expanduser("~/your/path/to/parkour_motion_reference")
+_PARKOUR_DATASET_DIR = os.path.expanduser("~/your/path/to/parkour_motion_reference")
 
 
 # ---------------------------------------------------------------------------

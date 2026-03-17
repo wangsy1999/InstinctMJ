@@ -19,14 +19,15 @@ This task follows the BeyondMimic whole-body tracking setup.
 1. Go to `beyondmimic/config/g1/beyondmimic_plane_cfg.py` and update the local motion dataset settings here:
 
     ```python
-    MOTION_NAME = "LafanSprint1"
-    _hacked_selected_file_ = "sprint1_subject2_retargetted.npz"
-    path=os.path.expanduser("~/Xyk/Datasets/UbisoftLAFAN1_GMR_g1_29dof_torsoBase_retargetted_instinctnpz")
+    MOTION_NAME = "LafanWalk1"
+    _hacked_selected_file_ = "walk1_subject1_retargeted.npz"
+    path=os.path.expanduser("~/your/path/to/lafan1_gmr_unitree_g1_instinct")
     ```
 
     - `MOTION_NAME`: Motion setup name used by the config.
     - `_hacked_selected_file_`: The motion file to load, relative to the dataset root.
     - `path=os.path.expanduser(...)`: The local dataset root you need to change on your machine.
+    - Keep `_hacked_selected_file_` relative to that dataset root so the generated selection YAML resolves correctly.
 
 2. Train the policy:
 ```bash
@@ -51,7 +52,7 @@ instinct-play Instinct-BeyondMimic-Plane-G1-Play-v0 --load-run <run_name>
     _hacked_selected_files_ = [
         ...
     ]
-    path=os.path.expanduser("~/Xyk/Datasets/NoKov-Marslab-Motions-instinctnpz/20251016_diveroll4_single")
+    path=os.path.expanduser("~/your/path/to/whole_body_motion_dataset")
     ```
 
     - `MOTION_NAME`: Motion setup name used by the config.
@@ -78,7 +79,7 @@ instinct-play Instinct-Shadowing-WholeBody-Plane-G1-Play-v0 --load-run <run_name
 1. Go to `perceptive/config/g1/perceptive_shadowing_cfg.py` and update the local dataset root here:
 
     ```python
-    MOTION_FOLDER = "~/Xyk/Datasets/20251116_50cm_kneeClimbStep1"
+    MOTION_FOLDER = "~/your/path/to/20251116_50cm_kneeClimbStep1"
     ```
 
     The motion buffer and terrain generator read `MOTION_FOLDER` and the `metadata.yaml` under that directory.
@@ -115,7 +116,7 @@ instinct-play Instinct-Perceptive-Shadowing-G1-Play-v0 \
 1. Go to `perceptive/config/g1/perceptive_vae_cfg.py` and update the local dataset root here:
 
     ```python
-    MOTION_FOLDER = "~/Xyk/Datasets/20251116_50cm_kneeClimbStep1"
+    MOTION_FOLDER = "~/your/path/to/20251116_50cm_kneeClimbStep1"
     ```
 
     The VAE motion buffer and terrain generator read `MOTION_FOLDER` and the `metadata.yaml` under that directory.
