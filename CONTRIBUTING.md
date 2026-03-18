@@ -12,7 +12,8 @@ This repository provides humanoid RL tasks on top of `mjlab`, so contributions s
 
 ## Development Setup
 
-Clone the sibling repositories and install them in editable mode:
+Clone the sibling repositories, sync the environment, then switch the sibling
+repositories into local editable installs:
 
 ```bash
 git clone https://github.com/mujocolab/mjlab.git
@@ -21,6 +22,7 @@ git clone https://github.com/project-instinct/InstinctMJ.git
 
 cd InstinctMJ
 uv sync
+uv pip install --python .venv/bin/python --no-deps -e ../mjlab -e ../instinct_rl
 ```
 
 If you use `pip`, install `mjlab`, `instinct_rl`, and `InstinctMJ` from the public repositories in editable mode:

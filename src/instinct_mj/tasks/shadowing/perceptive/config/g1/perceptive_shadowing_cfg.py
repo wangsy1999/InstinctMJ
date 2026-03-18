@@ -154,7 +154,8 @@ class G1PerceptiveShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
         self.sim.nconmax = 128
         self.sim.mujoco.jacobian = "sparse"
         self.sim.mujoco.ccd_iterations = 128
-        self.sim.mujoco.multiccd = False
+        # Keep multiccd disabled under mjlab's flag-based MuJoCo API.
+        self.sim.mujoco.enableflags = tuple(flag for flag in self.sim.mujoco.enableflags if flag != "multiccd")
 
         MOTION_NAME = list(motion_reference_cfg.motion_buffers.keys())[0]
         motion_buffer = motion_reference_cfg.motion_buffers[MOTION_NAME]

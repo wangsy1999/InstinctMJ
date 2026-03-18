@@ -74,12 +74,17 @@ class GroupedRayCaster(RayCastSensor):
         if self._frame_type == "body":
             frame_pos = self._data.xpos[:, self._frame_body_id]
             frame_mat = self._data.xmat[:, self._frame_body_id].view(-1, 3, 3)
-        elif self._frame_type == "site":
-            frame_pos = self._data.site_xpos[:, self._frame_site_id]
-            frame_mat = self._data.site_xmat[:, self._frame_site_id].view(-1, 3, 3)
-        else:  # geom
-            frame_pos = self._data.geom_xpos[:, self._frame_geom_id]
-            frame_mat = self._data.geom_xmat[:, self._frame_geom_id].view(-1, 3, 3)
+        else:
+            body_pos = self._data.xpos[:, self._frame_body_id]
+            body_mat = self._data.xmat[:, self._frame_body_id].view(-1, 3, 3)
+            if self._frame_type == "site":
+                frame_mat = self._data.site_xmat[:, self._frame_site_id].view(-1, 3, 3)
+            else:  # geom
+                frame_mat = self._data.geom_xmat[:, self._frame_geom_id].view(-1, 3, 3)
+            # Keep InstinctLab semantics: the attached frame origin comes from the
+            # parent body's full pose plus the local site/geom offset. ray_alignment
+            # only affects how ray starts/directions are rotated below.
+            frame_pos = body_pos + torch.einsum("bij,j->bi", body_mat, self._frame_local_pos)
 
         # note: we clone here because we are read-only operations
         frame_pos = frame_pos.clone()

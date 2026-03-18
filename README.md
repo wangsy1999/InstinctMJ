@@ -73,6 +73,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [CONTRIBUTOR_AGREEMENT.md](CONTRIBUTO
   uv sync
   ```
 
+- If you are actively developing against sibling `mjlab` / `instinct_rl` checkouts,
+  reinstall those local repositories in editable mode after `uv sync`.
+  Otherwise, `uv` will keep using the git-pinned sources from `pyproject.toml` / `uv.lock`.
+
+  ```bash
+  uv pip install --python .venv/bin/python --no-deps -e ../mjlab -e ../instinct_rl
+  ```
+
 - Or install editable packages from the public repositories with `pip`:
 
   ```bash
