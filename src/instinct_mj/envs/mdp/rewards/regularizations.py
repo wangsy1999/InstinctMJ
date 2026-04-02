@@ -3,13 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Sequence
 
 import torch
-from mjlab.actuator import (
-    BuiltinPositionActuator,
-    BuiltinVelocityActuator,
-    DelayedActuator,
-    XmlPositionActuator,
-    XmlVelocityActuator,
-)
 from mjlab.actuator.actuator import TransmissionType
 from mjlab.managers import ManagerTermBase, SceneEntityCfg
 
@@ -38,17 +31,12 @@ class constant_reward(ManagerTermBase):
         return self.reward
 
 
-_NON_EFFORT_CTRL_ACTUATOR_TYPES = (
-    BuiltinPositionActuator,
-    BuiltinVelocityActuator,
-    XmlPositionActuator,
-    XmlVelocityActuator,
-)
+_NON_EFFORT_CTRL_COMMAND_FIELDS = {"position", "velocity"}
 
 
 def _unwrap_base_actuator(actuator):
     base_actuator = actuator
-    while isinstance(base_actuator, DelayedActuator):
+    while hasattr(base_actuator, "base_actuator"):
         base_actuator = base_actuator.base_actuator
     return base_actuator
 
@@ -85,7 +73,7 @@ def _joint_applied_and_computed_torque(asset: Articulation) -> tuple[torch.Tenso
         applied_values = local_actuator_force[:, actuator.ctrl_ids]
         ctrl_type_actuator = _unwrap_base_actuator(actuator)
 
-        if isinstance(ctrl_type_actuator, _NON_EFFORT_CTRL_ACTUATOR_TYPES):
+        if getattr(ctrl_type_actuator, "command_field", None) in _NON_EFFORT_CTRL_COMMAND_FIELDS:
             computed_values = applied_values
         else:
             computed_values = local_ctrl[:, actuator.ctrl_ids]

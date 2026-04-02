@@ -5,7 +5,6 @@ import os
 from typing import TYPE_CHECKING, Sequence
 
 import torch
-from mjlab.actuator import BuiltinPositionActuator, BuiltinVelocityActuator, XmlPositionActuator, XmlVelocityActuator
 from mjlab.actuator.actuator import TransmissionType
 from mjlab.managers import SceneEntityCfg
 from mjlab.utils.lab_api import math as math_utils
@@ -32,12 +31,7 @@ if TYPE_CHECKING:
     from .monitor_cfg import MonitorTermCfg, TorqueMonitorSensorCfg
 
 
-_NON_EFFORT_CTRL_ACTUATOR_TYPES = (
-    BuiltinPositionActuator,
-    BuiltinVelocityActuator,
-    XmlPositionActuator,
-    XmlVelocityActuator,
-)
+_NON_EFFORT_CTRL_COMMAND_FIELDS = {"position", "velocity"}
 
 
 def _joint_torque_monitor_values(asset: Entity) -> tuple[torch.Tensor, torch.Tensor]:
@@ -60,7 +54,7 @@ def _joint_torque_monitor_values(asset: Entity) -> tuple[torch.Tensor, torch.Ten
         while hasattr(ctrl_type_actuator, "base_actuator"):
             ctrl_type_actuator = ctrl_type_actuator.base_actuator
 
-        if isinstance(ctrl_type_actuator, _NON_EFFORT_CTRL_ACTUATOR_TYPES):
+        if getattr(ctrl_type_actuator, "command_field", None) in _NON_EFFORT_CTRL_COMMAND_FIELDS:
             # Position/velocity actuator ctrl is not torque; use simulated force.
             computed_values = applied_values
         else:
