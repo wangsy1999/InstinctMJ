@@ -9,32 +9,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-import mjlab.envs.mdp as mdp
 import torch
 from mjlab.entity import Entity
+from mjlab.envs.mdp import dr
 from mjlab.managers import SceneEntityCfg
 from mjlab.utils.lab_api.math import sample_uniform
-
-
-def randomize_rigid_body_material(
-    env,
-    env_ids: torch.Tensor | None,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    static_friction_range: tuple[float, float] = (0.3, 1.0),
-    dynamic_friction_range: tuple[float, float] = (0.3, 1.0),
-) -> None:
-    """Randomize rigid-body geom friction coefficients."""
-    slide_friction_range = (
-        min(static_friction_range[0], dynamic_friction_range[0]),
-        max(static_friction_range[1], dynamic_friction_range[1]),
-    )
-    mdp.dr.geom_friction(
-        env=env,
-        env_ids=env_ids,
-        ranges=slide_friction_range,
-        operation="abs",
-        asset_cfg=asset_cfg,
-    )
 
 
 def randomize_rigid_body_mass(
@@ -45,7 +24,7 @@ def randomize_rigid_body_mass(
     operation: Literal["add", "scale", "abs"] = "add",
 ) -> None:
     """Randomize rigid-body mass."""
-    mdp.dr.body_mass(
+    dr.body_mass(
         env=env,
         env_ids=env_ids,
         ranges=mass_distribution_params,
@@ -73,11 +52,6 @@ def reset_joints_by_scale(
 
     joint_vel = asset.data.default_joint_vel[env_ids][:, asset_cfg.joint_ids].clone()
     joint_vel *= sample_uniform(*velocity_range, joint_vel.shape, env.device)
-    joint_vel_limits = torch.full_like(asset.data.joint_vel, float("inf"))
-    for actuator in asset.actuators:
-        joint_vel_limits[:, actuator.target_ids] = float(actuator.cfg.velocity_limit)
-    joint_vel_limits = joint_vel_limits[env_ids][:, asset_cfg.joint_ids]
-    joint_vel = joint_vel.clamp_(-joint_vel_limits, joint_vel_limits)
 
     joint_ids = asset_cfg.joint_ids
     if isinstance(joint_ids, list):
