@@ -1,7 +1,7 @@
 """G1 parkour AMP task config factories.
 
 Config is built via factory functions that return a fully-built
-``ManagerBasedRlEnvCfg``.
+``G1ParkourAmpEnvCfg``.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import os
 from dataclasses import dataclass, field
 
 import mujoco
-from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import (
     CurriculumTermCfg,
@@ -23,6 +22,7 @@ from mjlab.managers import (
     SceneEntityCfg,
     TerminationTermCfg,
 )
+from mjlab.scene import SceneCfg
 from mjlab.sensor import (
     ContactMatch,
     ContactSensorCfg,
@@ -44,9 +44,11 @@ from instinct_mj.assets.unitree_g1 import (
     beyondmimic_action_scale,
     beyondmimic_g1_29dof_delayed_actuator_cfgs,
 )
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
 from instinct_mj.motion_reference.motion_files.amass_motion_cfg import AmassMotionCfg as AmassMotionCfgBase
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
 from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
+from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
 from instinct_mj.sensors.volume_points import Grid3dPointsGeneratorCfg, VolumePointsCfg
 from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
@@ -65,7 +67,6 @@ __file_dir__ = os.path.dirname(os.path.realpath(__file__))
 # Example:
 # _PARKOUR_DATASET_DIR = os.path.expanduser("~/your/path/to/parkour_motion_reference")
 _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
-
 
 # ---------------------------------------------------------------------------
 # Motion reference configs
@@ -145,11 +146,36 @@ def _parkour_g1_with_shoe_spec() -> mujoco.MjSpec:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(kw_only=True)
+class G1ParkourSceneCfg(SceneCfg):
+    """Scene configuration for the G1 Parkour task."""
+
+
+@dataclass(kw_only=True)
+class G1ParkourAmpEnvCfg(InstinctLabRLEnvCfg):
+    """Dictionary-manager environment configuration for G1 Parkour AMP."""
+
+    scene: G1ParkourSceneCfg = field(default_factory=G1ParkourSceneCfg)
+    decimation: int = 4
+    observations: dict = field(default_factory=dict)
+    actions: dict = field(default_factory=dict)
+    rewards: dict = field(default_factory=lambda: {"rewards": {}})
+    terminations: dict = field(default_factory=dict)
+    commands: dict = field(default_factory=dict)
+    events: dict = field(default_factory=dict)
+    curriculum: dict = field(default_factory=dict)
+    monitors: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # All managers are already dicts, no conversion needed!
+        pass
+
+
 def instinct_g1_parkour_amp_env_cfg(
     *,
     play: bool = False,
     shoe: bool = True,
-) -> ManagerBasedRlEnvCfg:
+) -> G1ParkourAmpEnvCfg:
     """Build the base G1 parkour AMP environment configuration.
 
     Args:
@@ -158,10 +184,39 @@ def instinct_g1_parkour_amp_env_cfg(
       shoe: If True, apply shoe-specific adjustments (default is True).
 
     Returns:
-      A ``ManagerBasedRlEnvCfg`` instance with parkour settings applied.
+      A ``G1ParkourAmpEnvCfg`` instance with parkour settings applied.
     """
-    cfg = unitree_g1_flat_tracking_env_cfg(play=play, has_state_estimation=True)
-    cfg.monitors = {}
+    tracking_cfg = unitree_g1_flat_tracking_env_cfg(play=play, has_state_estimation=True)
+    tracking_scene = tracking_cfg.scene
+    cfg = G1ParkourAmpEnvCfg(
+        decimation=tracking_cfg.decimation,
+        scene=G1ParkourSceneCfg(
+            num_envs=tracking_scene.num_envs,
+            env_spacing=tracking_scene.env_spacing,
+            terrain=tracking_scene.terrain,
+            entities=tracking_scene.entities,
+            sensors=tracking_scene.sensors,
+            extent=tracking_scene.extent,
+            spec_fn=tracking_scene.spec_fn,
+        ),
+        observations=tracking_cfg.observations,
+        actions=tracking_cfg.actions,
+        events=tracking_cfg.events,
+        seed=tracking_cfg.seed,
+        sim=tracking_cfg.sim,
+        viewer=tracking_cfg.viewer,
+        episode_length_s=tracking_cfg.episode_length_s,
+        rewards={"rewards": tracking_cfg.rewards},
+        terminations=tracking_cfg.terminations,
+        commands=tracking_cfg.commands,
+        curriculum=tracking_cfg.curriculum,
+        metrics=tracking_cfg.metrics,
+        recorders=tracking_cfg.recorders,
+        is_finite_horizon=tracking_cfg.is_finite_horizon,
+        auto_reset=tracking_cfg.auto_reset,
+        scale_rewards_by_dt=tracking_cfg.scale_rewards_by_dt,
+        monitors={},
+    )
     cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
     cfg.viewer.entity_name = None
     cfg.viewer.body_name = None
@@ -173,6 +228,7 @@ def instinct_g1_parkour_amp_env_cfg(
     cfg.episode_length_s = 20.0
     cfg.sim.nconmax = 128
     cfg.sim.njmax = 700
+    cfg.sim.contact_sensor_maxmatch = 128
     cfg.sim.mujoco.iterations = 10
     cfg.sim.mujoco.ls_iterations = 20
     cfg.sim.mujoco.ccd_iterations = 128
@@ -206,23 +262,24 @@ def instinct_g1_parkour_amp_env_cfg(
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     # Scene sensors
     cfg.scene.sensors = (
-        ContactSensorCfg(
+        ForceThresholdContactSensorCfg(
             name="contact_forces",
             primary=ContactMatch(
                 mode="body",
                 pattern=("left_ankle_roll_link", "right_ankle_roll_link"),
                 entity="robot",
             ),
-            fields=("found", "force"),
+            fields=("force",),
             reduce="netforce",
             track_air_time=True,
+            force_threshold=1.0,
             history_length=3,
         ),
         ContactSensorCfg(
             name="torso_contact_forces",
             primary=ContactMatch(mode="body", pattern="torso_link", entity="robot"),
-            secondary=ContactMatch(mode="body", pattern="terrain"),
-            fields=("found", "force"),
+            secondary=None,
+            fields=("force",),
             reduce="netforce",
             track_air_time=False,
             history_length=3,
@@ -235,7 +292,7 @@ def instinct_g1_parkour_amp_env_cfg(
                 entity="robot",
                 exclude=("left_ankle_roll_link", "right_ankle_roll_link"),
             ),
-            fields=("found", "force"),
+            fields=("force",),
             reduce="netforce",
             track_air_time=False,
             history_length=3,
@@ -599,175 +656,177 @@ def instinct_g1_parkour_amp_env_cfg(
     )
 
     cfg.rewards = {
-        # ---------- Task rewards ----------
-        "track_lin_vel_xy_exp": RewardTermCfg(
-            func=parkour_mdp.track_lin_vel_xy_exp,
-            weight=2.0,
-            params={"command_name": "base_velocity", "std": 0.5},
-        ),
-        "track_ang_vel_z_exp": RewardTermCfg(
-            func=parkour_mdp.track_ang_vel_z_exp,
-            weight=2.0,
-            params={"command_name": "base_velocity", "std": 0.5},
-        ),
-        "heading_error": RewardTermCfg(
-            func=parkour_mdp.heading_error,
-            weight=-1.0,
-            params={"command_name": "base_velocity"},
-        ),
-        "dont_wait": RewardTermCfg(
-            func=parkour_mdp.dont_wait,
-            weight=-0.5,
-            params={"command_name": "base_velocity"},
-        ),
-        "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
-        "stand_still": RewardTermCfg(
-            func=parkour_mdp.stand_still,
-            weight=-0.3,
-            params={"command_name": "base_velocity", "offset": 4.0},
-        ),
-        # ---------- Regularization rewards ----------
-        "volume_points_penetration": RewardTermCfg(
-            func=parkour_mdp.volume_points_penetration,
-            weight=-4.0,
-            params={"sensor_name": "leg_volume_points"},
-        ),
-        "feet_air_time": RewardTermCfg(
-            func=parkour_mdp.feet_air_time,
-            weight=0.5,
-            params={
-                "command_name": "base_velocity",
-                "sensor_name": "contact_forces",
-                "vel_threshold": 0.15,
-            },
-        ),
-        "feet_slide": RewardTermCfg(
-            func=parkour_mdp.feet_slide,
-            weight=-0.4,
-            params={
-                "sensor_name": "contact_forces",
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
-                ),
-                "threshold": 1.0,
-            },
-        ),
-        "joint_deviation_hip": RewardTermCfg(
-            func=parkour_mdp.joint_deviation_square,
-            weight=-0.5,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    joint_names=(".*_hip_yaw_joint", ".*_hip_roll_joint"),
-                )
-            },
-        ),
-        "ang_vel_xy_l2": RewardTermCfg(func=parkour_mdp.ang_vel_xy_l2, weight=-0.05),
-        "dof_torques_l2": RewardTermCfg(
-            func=parkour_mdp.joint_torques_l2,
-            weight=-1.5e-7,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    joint_names=(".*_hip_.*", ".*_knee_joint", ".*_ankle_.*"),
-                )
-            },
-        ),
-        "dof_acc_l2": RewardTermCfg(
-            func=envs_mdp.joint_acc_l2,
-            weight=-1.25e-7,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
-        ),
-        "dof_vel_l2": RewardTermCfg(
-            func=envs_mdp.joint_vel_l2,
-            weight=-1e-4,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
-        ),
-        "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.005),
-        "flat_orientation_l2": RewardTermCfg(func=envs_mdp.flat_orientation_l2, weight=-3.0),
-        "pelvis_orientation_l2": RewardTermCfg(
-            func=parkour_mdp.link_orientation,
-            weight=-3.0,
-            params={"asset_cfg": SceneEntityCfg("robot", body_names="pelvis")},
-        ),
-        "feet_flat_ori": RewardTermCfg(
-            func=parkour_mdp.feet_orientation_contact,
-            weight=-0.4,
-            params={
-                "sensor_name": "contact_forces",
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
-                ),
-            },
-        ),
-        "feet_at_plane": RewardTermCfg(
-            func=parkour_mdp.feet_at_plane,
-            weight=-0.1,
-            params={
-                "contact_sensor_name": "contact_forces",
-                "left_height_scanner_name": "left_height_scanner",
-                "right_height_scanner_name": "right_height_scanner",
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
-                ),
-                "height_offset": 0.035,
-            },
-        ),
-        "feet_close_xy": RewardTermCfg(
-            func=parkour_mdp.feet_close_xy_gauss,
-            weight=0.4,
-            params={
-                "threshold": 0.12,
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
-                ),
-                "std": math.sqrt(0.05),
-            },
-        ),
-        "energy": RewardTermCfg(
-            func=parkour_mdp.motors_power_square,
-            weight=-5e-5,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    joint_names=(".*_hip_.*", ".*_knee_joint", ".*_ankle_.*"),
-                ),
-                "normalize_by_stiffness": True,
-            },
-        ),
-        "freeze_upper_body": RewardTermCfg(
-            func=parkour_mdp.joint_deviation_l1,
-            weight=-0.004,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    joint_names=(".*_shoulder_.*", ".*_elbow_.*", ".*_wrist.*", "waist_.*"),
-                )
-            },
-        ),
-        # ---------- Safety rewards ----------
-        "dof_pos_limits": RewardTermCfg(
-            func=envs_mdp.joint_pos_limits,
-            weight=-1.0,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
-        ),
-        "torque_limits": RewardTermCfg(
-            func=parkour_mdp.applied_torque_limits_by_ratio,
-            weight=-0.01,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-                "limit_ratio": 0.8,
-            },
-        ),
-        "undesired_contacts": RewardTermCfg(
-            func=parkour_mdp.undesired_contacts,
-            weight=-1.0,
-            params={"sensor_name": "undesired_contact_forces", "threshold": 1.0},
-        ),
+        "rewards": {
+            # ---------- Task rewards ----------
+            "track_lin_vel_xy_exp": RewardTermCfg(
+                func=parkour_mdp.track_lin_vel_xy_exp,
+                weight=2.0,
+                params={"command_name": "base_velocity", "std": 0.5},
+            ),
+            "track_ang_vel_z_exp": RewardTermCfg(
+                func=parkour_mdp.track_ang_vel_z_exp,
+                weight=2.0,
+                params={"command_name": "base_velocity", "std": 0.5},
+            ),
+            "heading_error": RewardTermCfg(
+                func=parkour_mdp.heading_error,
+                weight=-1.0,
+                params={"command_name": "base_velocity"},
+            ),
+            "dont_wait": RewardTermCfg(
+                func=parkour_mdp.dont_wait,
+                weight=-0.5,
+                params={"command_name": "base_velocity"},
+            ),
+            "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
+            "stand_still": RewardTermCfg(
+                func=parkour_mdp.stand_still,
+                weight=-0.3,
+                params={"command_name": "base_velocity", "offset": 4.0},
+            ),
+            # ---------- Regularization rewards ----------
+            "volume_points_penetration": RewardTermCfg(
+                func=parkour_mdp.volume_points_penetration,
+                weight=-4.0,
+                params={"sensor_name": "leg_volume_points"},
+            ),
+            "feet_air_time": RewardTermCfg(
+                func=parkour_mdp.feet_air_time,
+                weight=0.5,
+                params={
+                    "command_name": "base_velocity",
+                    "sensor_name": "contact_forces",
+                    "vel_threshold": 0.15,
+                },
+            ),
+            "feet_slide": RewardTermCfg(
+                func=parkour_mdp.feet_slide,
+                weight=-0.4,
+                params={
+                    "sensor_name": "contact_forces",
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                    ),
+                    "threshold": 1.0,
+                },
+            ),
+            "joint_deviation_hip": RewardTermCfg(
+                func=parkour_mdp.joint_deviation_square,
+                weight=-0.5,
+                params={
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        joint_names=(".*_hip_yaw_joint", ".*_hip_roll_joint"),
+                    )
+                },
+            ),
+            "ang_vel_xy_l2": RewardTermCfg(func=parkour_mdp.ang_vel_xy_l2, weight=-0.05),
+            "dof_torques_l2": RewardTermCfg(
+                func=parkour_mdp.joint_torques_l2,
+                weight=-1.5e-7,
+                params={
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        joint_names=(".*_hip_.*", ".*_knee_joint", ".*_ankle_.*"),
+                    )
+                },
+            ),
+            "dof_acc_l2": RewardTermCfg(
+                func=envs_mdp.joint_acc_l2,
+                weight=-1.25e-7,
+                params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+            ),
+            "dof_vel_l2": RewardTermCfg(
+                func=envs_mdp.joint_vel_l2,
+                weight=-1e-4,
+                params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+            ),
+            "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.005),
+            "flat_orientation_l2": RewardTermCfg(func=envs_mdp.flat_orientation_l2, weight=-3.0),
+            "pelvis_orientation_l2": RewardTermCfg(
+                func=parkour_mdp.link_orientation,
+                weight=-3.0,
+                params={"asset_cfg": SceneEntityCfg("robot", body_names="pelvis")},
+            ),
+            "feet_flat_ori": RewardTermCfg(
+                func=parkour_mdp.feet_orientation_contact,
+                weight=-0.4,
+                params={
+                    "sensor_name": "contact_forces",
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                    ),
+                },
+            ),
+            "feet_at_plane": RewardTermCfg(
+                func=parkour_mdp.feet_at_plane,
+                weight=-0.1,
+                params={
+                    "contact_sensor_name": "contact_forces",
+                    "left_height_scanner_name": "left_height_scanner",
+                    "right_height_scanner_name": "right_height_scanner",
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                    ),
+                    "height_offset": 0.035,
+                },
+            ),
+            "feet_close_xy": RewardTermCfg(
+                func=parkour_mdp.feet_close_xy_gauss,
+                weight=0.4,
+                params={
+                    "threshold": 0.12,
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                    ),
+                    "std": math.sqrt(0.05),
+                },
+            ),
+            "energy": RewardTermCfg(
+                func=parkour_mdp.motors_power_square,
+                weight=-5e-5,
+                params={
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        joint_names=(".*_hip_.*", ".*_knee_joint", ".*_ankle_.*"),
+                    ),
+                    "normalize_by_stiffness": True,
+                },
+            ),
+            "freeze_upper_body": RewardTermCfg(
+                func=parkour_mdp.joint_deviation_l1,
+                weight=-0.004,
+                params={
+                    "asset_cfg": SceneEntityCfg(
+                        "robot",
+                        joint_names=(".*_shoulder_.*", ".*_elbow_.*", ".*_wrist.*", "waist_.*"),
+                    )
+                },
+            ),
+            # ---------- Safety rewards ----------
+            "dof_pos_limits": RewardTermCfg(
+                func=envs_mdp.joint_pos_limits,
+                weight=-1.0,
+                params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+            ),
+            "torque_limits": RewardTermCfg(
+                func=parkour_mdp.applied_torque_limits_by_ratio,
+                weight=-0.01,
+                params={
+                    "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+                    "limit_ratio": 0.8,
+                },
+            ),
+            "undesired_contacts": RewardTermCfg(
+                func=parkour_mdp.undesired_contacts,
+                weight=-1.0,
+                params={"sensor_name": "undesired_contact_forces", "threshold": 1.0},
+            ),
+        }
     }
     cfg.curriculum = {
         "terrain_levels": CurriculumTermCfg(
@@ -869,7 +928,7 @@ def instinct_g1_parkour_amp_env_cfg(
         leg_volume_points.points_generator.z_max = -0.023
 
         # Adjust feet_at_plane height offset for shoes
-        cfg.rewards["feet_at_plane"].params["height_offset"] = 0.058
+        cfg.rewards["rewards"]["feet_at_plane"].params["height_offset"] = 0.058
 
     if play:
         cfg.scene.num_envs = 10
@@ -907,7 +966,7 @@ def instinct_g1_parkour_amp_final_cfg(
     *,
     play: bool = False,
     shoe: bool = True,
-) -> ManagerBasedRlEnvCfg:
+) -> G1ParkourAmpEnvCfg:
     """Create the final G1 parkour AMP env configuration.
 
     Args:
@@ -917,7 +976,7 @@ def instinct_g1_parkour_amp_final_cfg(
         matching the original ``G1ParkourEnvCfg``).
 
     Returns:
-      A fully-built ``ManagerBasedRlEnvCfg`` instance.
+      A fully-built ``G1ParkourAmpEnvCfg`` instance.
     """
     # Build base parkour config (already includes play overrides if requested)
     cfg = instinct_g1_parkour_amp_env_cfg(play=play, shoe=shoe)

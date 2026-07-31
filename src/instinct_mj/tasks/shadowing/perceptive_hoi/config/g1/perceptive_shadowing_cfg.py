@@ -19,8 +19,8 @@ from instinct_mj.assets.unitree_g1 import (
 )
 from instinct_mj.monitors import ActuatorMonitorTerm, MonitorTermCfg, ShadowingBasePosMonitorTerm
 from instinct_mj.motion_reference import HoiMotionReferenceData, HoiMotionReferenceState
-from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
 from instinct_mj.motion_reference.motion_files.omomo_motion_cfg import OmomoMotionCfg as OmomoMotionCfgBase
+from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
 from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
 
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
@@ -58,7 +58,7 @@ G1_29DOF_LINKS = [
     "right_ankle_roll_link",
 ]
 
-OMOMO_DATASET_PATH = "~/Datasets/OMOMO/retargeted"
+OMOMO_DATASET_PATH = "~/Datasets/OMOMO/retargeted_omniretarget_instinctmj_torso_v10_object_xy_align_foot_lock"
 
 MESH_FILE_PATHS = {
     "floorlamp": "~/Datasets/OMOMO/data/captured_objects/floorlamp_cleaned_simplified.obj",
@@ -103,6 +103,7 @@ def _make_mesh_object_spec(mesh_file_path: str, scale: tuple[float, float, float
             type=mujoco.mjtGeom.mjGEOM_MESH,
             meshname=mesh.name,
             mass=1.0,
+            group=2,
             rgba=(0.0, 0.8, 0.3, 1.0),
             friction=(1.0, 0.005, 0.0001),
         )
@@ -215,7 +216,8 @@ class G1PerceptiveHoiShadowingEnvCfg(perceptual_cfg.PerceptiveHoiShadowingEnvCfg
         # self.scene.robot.spawn.rigid_props.max_depenetration_velocity = 0.3
         self.actions["joint_pos"].scale = beyondmimic_action_scale
         self.sim.njmax = 700
-        self.sim.nconmax = 128
+        self.sim.nconmax = 256
+        self.sim.contact_sensor_maxmatch = 256
         self.sim.mujoco.jacobian = "sparse"
 
         MOTION_NAME = list(motion_reference_cfg.motion_buffers.keys())[0]
@@ -292,6 +294,8 @@ class G1PerceptiveHoiShadowingEnvCfg_PLAY(G1PerceptiveHoiShadowingEnvCfg):
         # self.events.reset_robot.params["randomize_pose_range"]["roll"] = (0.0, 0.6)
 
         # remove some terimation terms
+        self.sim.nconmax = 256
+        self.sim.contact_sensor_maxmatch = 256
         self.terminations["base_pos_too_far"] = None
         self.terminations["base_pg_too_far"] = None
         self.terminations["link_pos_too_far"] = None

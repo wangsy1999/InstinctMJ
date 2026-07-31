@@ -12,15 +12,7 @@ from mjlab.managers import RewardTermCfg as RewTermCfg
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
-from mjlab.sensor import (
-    ContactMatch,
-    ContactSensorCfg,
-    GridPatternCfg,
-    ObjRef,
-    PinholeCameraPatternCfg,
-    RayCastSensorCfg,
-    SensorCfg,
-)
+from mjlab.sensor import ContactMatch, GridPatternCfg, ObjRef, PinholeCameraPatternCfg, RayCastSensorCfg, SensorCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
@@ -36,12 +28,10 @@ from instinct_mj.monitors import (
     ShadowingRotationMonitorTerm,
 )
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
+from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
 from instinct_mj.terrains.terrain_importer_cfg import TerrainImporterCfg
-from instinct_mj.utils.noise import (
-    CropAndResizeCfg,
-    DepthNormalizationCfg,
-)
+from instinct_mj.utils.noise import CropAndResizeCfg, DepthNormalizationCfg
 
 # PROPRIO_HISTORY_LENGTH = 0
 PROPRIO_HISTORY_LENGTH = 8
@@ -165,19 +155,19 @@ def _make_hoi_base_sensors(include_height_scanner: bool = True) -> list[SensorCf
 
     Contact semantics differ from the perceptive task: there is NO secondary
     match, so "any contact with a robot body counts" (terrain + objects + self).
-    This matches IsaacLab's ContactSensor(prim_path="Robot/.*") net-force
-    semantics, which the shared undesired_contacts / illegal_reset_contact terms
-    rely on.
+    This preserves the source task's whole-robot net-force semantics, which the
+    shared undesired_contacts / illegal_reset_contact terms rely on.
     """
     sensor_list: list[SensorCfg] = [
-        ContactSensorCfg(
+        ForceThresholdContactSensorCfg(
             name="contact_forces",
             primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
             # No secondary on purpose (see docstring).
-            fields=("found", "force"),
-            reduce="maxforce",
+            fields=("force",),
+            reduce="netforce",
             history_length=3,
             track_air_time=True,
+            force_threshold=1.0,
         )
     ]
     if include_height_scanner:
@@ -187,7 +177,9 @@ def _make_hoi_base_sensors(include_height_scanner: bool = True) -> list[SensorCf
                 frame=ObjRef(type="body", name="torso_link", entity="robot"),
                 pattern=GridPatternCfg(resolution=0.1, size=(1.6, 1.0)),
                 ray_alignment="yaw",
-                max_distance=30.0,
+                max_distance=5.0,
+                exclude_parent_body=True,
+                include_geom_groups=(0,),
                 debug_vis=False,
             )
         )
@@ -546,7 +538,7 @@ def make_hoi_events() -> dict[str, EventTermCfg]:
 
     Domain-randomization events mirror the perceptive task. HOI replaces
     'match_motion_ref_with_scene' (motion-matched terrain) with rigid-object
-    reference reset/update events, matching IsaacLab's perceptive_hoi config.
+    reference reset/update events, matching the source perceptive_hoi config.
     """
     return {
         # domain rand
@@ -614,7 +606,7 @@ def make_hoi_events() -> dict[str, EventTermCfg]:
             },
         ),
         "randomize_rigid_body_mass": EventTermCfg(
-            func=mdp.dr.body_mass,
+            func=mdp.dr.pseudo_inertia,
             mode="startup",
             params={
                 "asset_cfg": SceneEntityCfg(
@@ -627,9 +619,8 @@ def make_hoi_events() -> dict[str, EventTermCfg]:
                         "right_wrist.*",
                     ],
                 ),
-                "ranges": (0.8, 1.2),
-                "operation": "scale",
-                "distribution": "uniform",
+                "alpha_range": (0.5 * math.log(0.8), 0.5 * math.log(1.2)),
+                "distribution": instinct_mdp.uniform_mass_scale_to_alpha,
             },
         ),
         "reset_robot": EventTermCfg(
@@ -860,7 +851,7 @@ class PerceptiveHoiShadowingEnvCfg(InstinctLabRLEnvCfg):
     commands: dict = field(default_factory=make_hoi_commands)
     actions: dict = field(default_factory=make_hoi_actions)
     observations: dict = field(default_factory=make_hoi_observations)
-    rewards: dict = field(default_factory=make_hoi_rewards)
+    rewards: dict = field(default_factory=lambda: {"rewards": make_hoi_rewards()})
     events: dict = field(default_factory=make_hoi_events)
     curriculum: dict = field(default_factory=make_hoi_curriculum)
     terminations: dict = field(default_factory=make_hoi_terminations)
@@ -881,6 +872,6 @@ class PerceptiveHoiShadowingEnvCfg(InstinctLabRLEnvCfg):
         # detection (HOI adds several object meshes the robot collides with), which reduces
         # spurious deep-penetration contact-force spikes at reset.
         self.sim.mujoco.ccd_iterations = 128
-        self.sim.nconmax = 128
+        self.sim.nconmax = 256
         self.sim.njmax = 512
-        self.sim.contact_sensor_maxmatch = 128
+        self.sim.contact_sensor_maxmatch = 256

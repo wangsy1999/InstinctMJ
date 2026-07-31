@@ -11,15 +11,7 @@ from mjlab.managers import RewardTermCfg as RewTermCfg
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
-from mjlab.sensor import (
-    ContactMatch,
-    ContactSensorCfg,
-    GridPatternCfg,
-    ObjRef,
-    PinholeCameraPatternCfg,
-    RayCastSensorCfg,
-    SensorCfg,
-)
+from mjlab.sensor import ContactMatch, GridPatternCfg, ObjRef, PinholeCameraPatternCfg, RayCastSensorCfg, SensorCfg
 from mjlab.terrains import FlatPatchSamplingCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
@@ -36,6 +28,7 @@ from instinct_mj.monitors import (
     ShadowingRotationMonitorTerm,
 )
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
+from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.sensors.grouped_ray_caster import GroupedRayCasterCameraCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
 from instinct_mj.tasks.shadowing import mdp as shadowing_mdp
@@ -175,11 +168,11 @@ class PerceptiveShadowingSceneCfg(SceneCfg):
         default_factory=lambda: TerrainImporterCfg(
             terrain_type="hacked_generator",
             terrain_generator=FiledTerrainGeneratorCfg(
-                size=(9, 12),
+                size=(30, 16),
                 border_width=0.0,
                 border_height=0.0,
-                num_rows=7,
-                num_cols=7,
+                num_rows=3,
+                num_cols=3,
                 add_lights=True,
                 sub_terrains={
                     # MotionMatchedTerrainCfg keeps motion-terrain pairing from metadata.yaml.
@@ -188,6 +181,7 @@ class PerceptiveShadowingSceneCfg(SceneCfg):
                         proportion=1.0,
                         path="PLACEHOLDER",  # Will be overridden in concrete env cfg __post_init__
                         metadata_yaml="PLACEHOLDER",  # Will be overridden in concrete env cfg __post_init__
+                        use_input_origin_frame=True,
                         collision_coacd=True,
                         # Use CoACD hulls directly as rendered terrain mesh (instead of source STL mesh).
                         collision_coacd_visualize_collision_hulls=True,
@@ -213,21 +207,24 @@ class PerceptiveShadowingSceneCfg(SceneCfg):
     # sensors
     sensors: tuple[SensorCfg, ...] = field(
         default_factory=lambda: (
-            ContactSensorCfg(
+            ForceThresholdContactSensorCfg(
                 name="contact_forces",
                 primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
-                secondary=ContactMatch(mode="body", pattern="terrain"),
-                fields=("found", "force"),
-                reduce="maxforce",
+                secondary=None,
+                fields=("force",),
+                reduce="netforce",
                 history_length=3,
                 track_air_time=True,
+                force_threshold=1.0,
             ),
             RayCastSensorCfg(
                 name="height_scanner",
                 frame=ObjRef(type="body", name="torso_link", entity="robot"),
                 pattern=GridPatternCfg(resolution=0.1, size=(1.6, 1.0)),
                 ray_alignment="yaw",
-                max_distance=30.0,
+                max_distance=5.0,
+                exclude_parent_body=True,
+                include_geom_groups=(0,),
                 debug_vis=False,
             ),
             NoisyGroupedRayCasterCameraCfg(
@@ -298,14 +295,15 @@ def make_perceptive_scene_sensors(
     """Build perceptive scene sensors without bridge fields."""
     # lights are applied in _edit_perceptive_scene_spec.
     sensor_list: list[SensorCfg] = [
-        ContactSensorCfg(
+        ForceThresholdContactSensorCfg(
             name="contact_forces",
             primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
-            secondary=ContactMatch(mode="body", pattern="terrain"),
-            fields=("found", "force"),
-            reduce="maxforce",
+            secondary=None,
+            fields=("force",),
+            reduce="netforce",
             history_length=3,
             track_air_time=True,
+            force_threshold=1.0,
         )
     ]
     if include_height_scanner:
@@ -315,7 +313,9 @@ def make_perceptive_scene_sensors(
                 frame=ObjRef(type="body", name="torso_link", entity="robot"),
                 pattern=GridPatternCfg(resolution=0.1, size=(1.6, 1.0)),
                 ray_alignment="yaw",
-                max_distance=30.0,
+                max_distance=5.0,
+                exclude_parent_body=True,
+                include_geom_groups=(0,),
                 debug_vis=False,
             )
         )
@@ -717,7 +717,7 @@ def make_events() -> dict[str, EventTermCfg]:
             },
         ),
         "randomize_rigid_body_mass": EventTermCfg(
-            func=mdp.dr.body_mass,
+            func=mdp.dr.pseudo_inertia,
             mode="startup",
             params={
                 "asset_cfg": SceneEntityCfg(
@@ -730,9 +730,8 @@ def make_events() -> dict[str, EventTermCfg]:
                         "right_wrist.*",
                     ],
                 ),
-                "ranges": (0.8, 1.2),
-                "operation": "scale",
-                "distribution": "uniform",
+                "alpha_range": (0.5 * math.log(0.8), 0.5 * math.log(1.2)),
+                "distribution": instinct_mdp.uniform_mass_scale_to_alpha,
             },
         ),
         "match_motion_ref_with_scene": EventTermCfg(
@@ -954,7 +953,7 @@ class PerceptiveShadowingEnvCfg(InstinctLabRLEnvCfg):
     commands: dict = field(default_factory=make_perceptive_commands)
     actions: dict = field(default_factory=make_actions)
     observations: dict = field(default_factory=make_observations)
-    rewards: dict = field(default_factory=make_rewards)
+    rewards: dict = field(default_factory=lambda: {"rewards": make_rewards()})
     events: dict = field(default_factory=make_events)
     curriculum: dict = field(default_factory=make_curriculum)
     terminations: dict = field(default_factory=make_terminations)
@@ -976,3 +975,4 @@ class PerceptiveShadowingEnvCfg(InstinctLabRLEnvCfg):
         self.sim.mujoco.ccd_iterations = 128
         self.sim.nconmax = 128
         self.sim.njmax = 512
+        self.sim.contact_sensor_maxmatch = 128

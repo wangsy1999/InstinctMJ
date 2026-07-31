@@ -140,8 +140,8 @@ class BeyondMimicSceneCfg(SceneCfg):
                     ),
                     entity="robot",
                 ),
-                secondary=ContactMatch(mode="body", pattern="terrain"),
-                fields=("found", "force"),
+                secondary=None,
+                fields=("force",),
                 reduce="netforce",
                 history_length=3,
                 num_slots=1,
@@ -301,7 +301,7 @@ def make_beyondmimic_rewards() -> dict[str, RewTermCfg | None]:
                 "difference_type": "axis_angle",
             },
         ),
-        "motion_body_pos": RewTermCfg(
+        "link_pos_imitation_gauss": RewTermCfg(
             func=instinct_mdp.link_pos_imitation_gauss,
             weight=1.0,
             params={
@@ -311,7 +311,7 @@ def make_beyondmimic_rewards() -> dict[str, RewTermCfg | None]:
                 "std": 0.3,
             },
         ),
-        "motion_body_ori": RewTermCfg(
+        "link_rot_imitation_gauss": RewTermCfg(
             func=instinct_mdp.link_rot_imitation_gauss,
             weight=1.0,
             params={
@@ -321,7 +321,7 @@ def make_beyondmimic_rewards() -> dict[str, RewTermCfg | None]:
                 "std": 0.4,
             },
         ),
-        "motion_body_lin_vel": RewTermCfg(
+        "link_lin_vel_imitation_gauss": RewTermCfg(
             func=instinct_mdp.link_lin_vel_imitation_gauss,
             weight=1.0,
             params={
@@ -329,7 +329,7 @@ def make_beyondmimic_rewards() -> dict[str, RewTermCfg | None]:
                 "std": 1.0,
             },
         ),
-        "motion_body_ang_vel": RewTermCfg(
+        "link_ang_vel_imitation_gauss": RewTermCfg(
             func=instinct_mdp.link_ang_vel_imitation_gauss,
             weight=1.0,
             params={
@@ -591,7 +591,7 @@ class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
     commands: dict = field(default_factory=make_beyondmimic_commands)
     actions: dict = field(default_factory=make_beyondmimic_actions)
     observations: dict = field(default_factory=make_beyondmimic_observations)
-    rewards: dict = field(default_factory=make_beyondmimic_rewards)
+    rewards: dict = field(default_factory=lambda: {"rewards": make_beyondmimic_rewards()})
     events: dict = field(default_factory=make_beyondmimic_events)
     curriculum: dict = field(default_factory=make_beyondmimic_curriculum)
     terminations: dict = field(default_factory=make_beyondmimic_terminations)
@@ -607,6 +607,7 @@ class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
         # auto-allocating enormous EPA buffers.
         self.sim.nconmax = 100
         self.sim.njmax = 300
+        self.sim.contact_sensor_maxmatch = 100
         self.sim.mujoco.timestep = 1.0 / 50.0 / self.decimation
         self.sim.mujoco.iterations = 10
         self.sim.mujoco.ls_iterations = 20
