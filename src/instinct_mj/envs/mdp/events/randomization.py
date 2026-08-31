@@ -15,10 +15,6 @@ from instinct_mj.sensors.grouped_ray_caster import GroupedRayCaster
 if TYPE_CHECKING:
     from mjlab.entity import Entity as Articulation
     from mjlab.entity import Entity as RigidObject
-    from mjlab.sensor import CameraSensor as Camera
-    from mjlab.sensor import RayCastSensor as RayCasterCamera
-
-    from instinct_mj.sensors.grouped_ray_caster import GroupedRayCasterCamera
 
 ManagerBasedEnv = ManagerBasedRlEnv
 
@@ -160,7 +156,7 @@ def randomize_default_joint_pos(
             env_ids = env_ids[:, None]  # type: ignore
         asset.data.default_joint_pos[env_ids, joint_ids] = pos
         # update the offset in action since it is not updated automatically
-        env.action_manager.get_term("joint_pos")._offset[env_ids, joint_ids] = pos
+        env.action_manager.get_term("joint_pos").offset[env_ids, joint_ids] = pos
 
 
 def randomize_ray_offsets(
@@ -211,6 +207,7 @@ def randomize_ray_offsets(
     sensor.ray_directions[env_ids] = ray_directions
 
 
+@requires_model_fields("cam_pos", "cam_quat")
 def randomize_camera_offsets(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor | None,
@@ -227,99 +224,31 @@ def randomize_camera_offsets(
             and values are tuples representing the range for each component.
         - distribution: (str) "uniform" or "log_uniform" or "gaussian", determines the distribution of the randomization.
     """
-    # extract the used quantities (to enable type-hinting), as well as all inherited classes
-    sensor: Camera | RayCasterCamera | GroupedRayCasterCamera = env.scene[asset_cfg.name]
-
-    # resolve environment ids
-    if env_ids is None:
-        env_ids = torch.arange(env.scene.num_envs, device=sensor._device)
-
-    # get the camera pose
-    num_sensors = sensor.data.pos_w.shape[0]
-    camera_offset_pos = torch.tensor(list(sensor.cfg.offset.pos), device=sensor._device).repeat(num_sensors, 1)
-    camera_quat_w = math_utils.convert_camera_frame_orientation_convention(
-        torch.tensor([sensor.cfg.offset.rot], device=sensor._device),
-        origin=sensor.cfg.offset.convention,
-        target="world",
-    )
-    camera_offset_quat = camera_quat_w.repeat(num_sensors, 1)
-    camera_offset_pos = camera_offset_pos[env_ids]
-    camera_offset_quat = camera_offset_quat[env_ids]
-
-    # sample from given range
-    camera_offset_pos[..., 0] = _randomize_prop_by_op(
-        camera_offset_pos[..., 0].unsqueeze(-1),
-        offset_pose_ranges.get("x", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_offset_pos[..., 1] = _randomize_prop_by_op(
-        camera_offset_pos[..., 1].unsqueeze(-1),
-        offset_pose_ranges.get("y", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_offset_pos[..., 2] = _randomize_prop_by_op(
-        camera_offset_pos[..., 2].unsqueeze(-1),
-        offset_pose_ranges.get("z", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_euler_w = math_utils.euler_xyz_from_quat(camera_offset_quat)
-
-    camera_euler_roll = _randomize_prop_by_op(
-        camera_euler_w[0].unsqueeze(-1),
-        offset_pose_ranges.get("roll", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_euler_pitch = _randomize_prop_by_op(
-        camera_euler_w[1].unsqueeze(-1),
-        offset_pose_ranges.get("pitch", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_euler_yaw = _randomize_prop_by_op(
-        camera_euler_w[2].unsqueeze(-1),
-        offset_pose_ranges.get("yaw", (0.0, 0.0)),
-        None,
-        slice(None),
-        operation="add",
-        distribution=distribution,
-    ).squeeze(-1)
-
-    camera_offset_quat = math_utils.quat_from_euler_xyz(
-        camera_euler_roll,
-        camera_euler_pitch,
-        camera_euler_yaw,
-    )
-    camera_pos_w, camera_quat_w = sensor._compute_view_world_poses(env_ids)
-    camera_pos_w += math_utils.quat_apply(camera_quat_w, camera_offset_pos)
-    camera_quat_w = math_utils.quat_mul(camera_quat_w, camera_offset_quat)
-
-    # set the new camera pose
-    # Note: the offset will be updated automatically,
-    # and the attachment relation is kept.
-    sensor.set_world_poses(
-        camera_pos_w,
-        camera_quat_w,
+    # The public model-field DR functions resolve camera targets and environment
+    # ids through asset_cfg, then sample from the given installation-error ranges.
+    position_ranges = {
+        axis: offset_pose_ranges.get(axis_name, (0.0, 0.0))
+        for axis, axis_name in enumerate(("x", "y", "z"))
+    }
+    dr.cam_pos(
+        env,
         env_ids=env_ids,
-        convention=sensor.cfg.offset.convention,
+        ranges=position_ranges,
+        asset_cfg=asset_cfg,
+        distribution=distribution,
+        operation="add",
+        axes=[0, 1, 2],
+    )
+    # Compose the sampled rotation with the default camera offset. The local
+    # offset is updated while the attachment relation is kept.
+    dr.cam_quat(
+        env,
+        env_ids=env_ids,
+        roll_range=offset_pose_ranges.get("roll", (0.0, 0.0)),
+        pitch_range=offset_pose_ranges.get("pitch", (0.0, 0.0)),
+        yaw_range=offset_pose_ranges.get("yaw", (0.0, 0.0)),
+        distribution=distribution,
+        asset_cfg=asset_cfg,
     )
 
 

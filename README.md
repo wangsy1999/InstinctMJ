@@ -189,12 +189,6 @@ Run all checks:
 pre-commit run --all-files
 ```
 
-Or use the local helper command:
-
-```bash
-uv run instinct-format
-```
-
 To enable hooks on every commit:
 
 ```bash
@@ -218,7 +212,7 @@ Example registration pattern:
 from instinct_mj.tasks.registry import register_instinct_task
 
 from .my_env_cfg import MyEnvCfg, MyEnvCfg_PLAY
-from .rl_cfgs import my_instinct_rl_cfg
+from .rl_cfg import my_instinct_rl_cfg
 
 register_instinct_task(
     task_id="Instinct-My-Task-v0",

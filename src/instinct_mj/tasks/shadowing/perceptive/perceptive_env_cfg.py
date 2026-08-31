@@ -11,7 +11,15 @@ from mjlab.managers import RewardTermCfg as RewTermCfg
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
-from mjlab.sensor import ContactMatch, GridPatternCfg, ObjRef, PinholeCameraPatternCfg, RayCastSensorCfg, SensorCfg
+from mjlab.sensor import (
+    ContactMatch,
+    ContactSensorCfg,
+    GridPatternCfg,
+    ObjRef,
+    PinholeCameraPatternCfg,
+    RayCastSensorCfg,
+    SensorCfg,
+)
 from mjlab.terrains import FlatPatchSamplingCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
@@ -28,7 +36,6 @@ from instinct_mj.monitors import (
     ShadowingRotationMonitorTerm,
 )
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
-from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.sensors.grouped_ray_caster import GroupedRayCasterCameraCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
 from instinct_mj.tasks.shadowing import mdp as shadowing_mdp
@@ -207,15 +214,14 @@ class PerceptiveShadowingSceneCfg(SceneCfg):
     # sensors
     sensors: tuple[SensorCfg, ...] = field(
         default_factory=lambda: (
-            ForceThresholdContactSensorCfg(
+            ContactSensorCfg(
                 name="contact_forces",
                 primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
                 secondary=None,
-                fields=("force",),
+                fields=("found", "force"),
                 reduce="netforce",
                 history_length=3,
                 track_air_time=True,
-                force_threshold=1.0,
             ),
             RayCastSensorCfg(
                 name="height_scanner",
@@ -295,15 +301,14 @@ def make_perceptive_scene_sensors(
     """Build perceptive scene sensors without bridge fields."""
     # lights are applied in _edit_perceptive_scene_spec.
     sensor_list: list[SensorCfg] = [
-        ForceThresholdContactSensorCfg(
+        ContactSensorCfg(
             name="contact_forces",
             primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
             secondary=None,
-            fields=("force",),
+            fields=("found", "force"),
             reduce="netforce",
             history_length=3,
             track_air_time=True,
-            force_threshold=1.0,
         )
     ]
     if include_height_scanner:

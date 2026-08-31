@@ -2,7 +2,7 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .rl_cfgs import (
+from .rl_cfg import (
     g1_perceptive_shadowing_instinct_rl_cfg,
     g1_perceptive_shadowing_one_motion_instinct_rl_cfg,
     g1_perceptive_vae_instinct_rl_cfg,

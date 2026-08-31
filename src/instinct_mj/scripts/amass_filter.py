@@ -9,11 +9,15 @@ from __future__ import annotations
 import functools
 import multiprocessing as mp
 import os
+from dataclasses import dataclass
+from typing import Literal
 
+import mjlab
 import numpy as np
 import pytorch_kinematics as pk
 import torch
 import tqdm
+import tyro
 import yaml
 from mjlab.utils.lab_api import math as math_utils
 
@@ -57,8 +61,59 @@ POTENTIAL_GIMBAL_LOCK_JOINTS = [
 ]
 
 
+@dataclass
+class AmassFilterConfig:
+    """Configuration for AMASS motion filtering."""
+
+    datadir: str
+    """Path to the directory containing the AMASS dataset."""
+    urdf_path: str = G1_MJCF_PATH
+    """Path to the URDF file (or MJCF XML) for the robot chain."""
+    startfromfiles: str | None = None
+    """The subset list to filter from."""
+    output: str = "output.yaml"
+    """Output file."""
+    mp: bool = False
+    """Use multiprocessing."""
+    pack: bool = False
+    """Use pack-to-GPU mode to accelerate filtering."""
+    min_traj_time: float = 1.0
+    """Minimum trajectory time allowed."""
+    vel_smooth_window: float = 0.2
+    """Window size for velocity smoothing in seconds."""
+    angvel_frame: Literal["world", "base"] = "base"
+    max_angvel: float | None = None
+    """Maximum angular velocity allowed."""
+    max_airborne_time: float = 0.5
+    """Maximum airborne time allowed."""
+    airborne_height_threshold: float = 0.2
+    """Height threshold used to determine if the character is airborne."""
+    max_rollpitch: float | None = None
+    """Maximum roll/pitch angle allowed."""
+    max_linvel: float = 3.0
+    """Maximum linear velocity allowed."""
+    sit_leg_bend_threshold: float = 0.8
+    """Threshold used to determine if the leg is bent, in radians."""
+    sit_foot_center_offset_max: float = 0.2
+    """Maximum offset of the foot center from the base link."""
+    sit_torso_pitch_threshold: float = 0.5
+    """Maximum torso pitch when sitting, in radians."""
+    min_base_height: float | None = None
+    """If set, the base height must be above this value."""
+    max_base_height: float = 1.0
+    """The base height must be below this value."""
+    gimbal_lock_threshold: float | None = None  # 0.2,
+    """Threshold used to determine if joints are in gimbal lock, in radians."""
+    gimbal_lock_time: float = 0.5
+    """Time duration used to consider a motion as gimbal locked, in seconds."""
+    joint_limit_time: float = 0.5
+    """Maximum time allowed with more than three joints reaching joint limits."""
+    max_joint_vel: float = 30.0
+    """Maximum allowed joint velocity."""
+
+
 @torch.no_grad()
-def determine_motion_validity(filepath, args) -> tuple[str, bool]:
+def determine_motion_validity(filepath, args: AmassFilterConfig) -> tuple[str, bool]:
     """Determines if the motion is valid based on the file path and the arguments."""
 
     with open(args.urdf_path, mode="rb") as f:
@@ -312,7 +367,7 @@ def determine_motion_validity(filepath, args) -> tuple[str, bool]:
     return filepath, True
 
 
-def main(args):
+def main(args: AmassFilterConfig) -> None:
     # list all the files
     args.datadir = os.path.abspath(args.datadir)
     if args.startfromfiles is None:
@@ -379,7 +434,7 @@ def main(args):
         save_filtered_files(files_validity, args)
 
 
-def save_filtered_files(files_validity, args):
+def save_filtered_files(files_validity, args: AmassFilterConfig) -> None:
     # store the list
     print("Storing the list of selected files...")
     selected_files = [file for file, valid in files_validity if valid]
@@ -419,98 +474,9 @@ def save_filtered_files(files_validity, args):
     print(f"AMASS filtered done, {len(selected_files)} files stored in {args.output}")
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="AMASS filtering script")
-    parser.add_argument("--datadir", help="path to the directory containing the AMASS dataset", required=True)
-    parser.add_argument(
-        "--urdf_path",
-        help="path to the URDF file (or MJCF XML) for the robot chain",
-        default=G1_MJCF_PATH,
-    )
-    parser.add_argument("--startfromfiles", help="the subset list to filter from", type=str, default=None)
-    parser.add_argument("--output", help="output file", default="output.yaml")
-    parser.add_argument("--mp", action="store_true", help="use multiprocessing")
-    parser.add_argument("--pack", action="store_true", help="use pack-to-gpu method to accelerate the filtering")
-    parser.add_argument("--min_traj_time", type=float, help="minimum trajectory time allowed", default=1.0)
-    parser.add_argument(
-        "--vel_smooth_window", type=float, help="window size for velocity smoothing [second]", default=0.2
-    )
-    parser.add_argument("--angvel_frame", choices=["world", "base"], default="base")
-    parser.add_argument("--max_angvel", type=float, help="maximum angular velocity allowed", default=None)
-    parser.add_argument("--max_airborne_time", type=float, help="maximum airborne time allowed", default=0.5)
-    parser.add_argument(
-        "--airborne_height_threshold",
-        type=float,
-        help="the height threshold to determine if the character is airborne",
-        default=0.2,
-    )
-    parser.add_argument("--max_rollpitch", type=float, help="maximum roll/pitch angle allowed", default=None)
-    parser.add_argument("--max_linvel", type=float, help="maximum linear velocity allowed", default=3.0)
-    parser.add_argument(
-        "--sit_leg_bend_threshold",
-        type=float,
-        help="the threshold to determine if the leg is bent (in radians)",
-        default=0.8,
-    )
-    parser.add_argument(
-        "--sit_foot_center_offset_max",
-        type=float,
-        help="the maximum offset of the foot center from the base link",
-        default=0.2,
-    )
-    parser.add_argument(
-        "--sit_torso_pitch_threshold",
-        type=float,
-        help="the maximum pitch of the torso (in radians) when sitting",
-        default=0.5,
-    )
-    parser.add_argument(
-        "--min_base_height",
-        type=float,
-        help="If set, the base height must be above this value to be considered valid",
-        default=None,
-    )
-    parser.add_argument(
-        "--max_base_height",
-        type=float,
-        help="If set, the base height must be below this value to be considered valid",
-        default=1.0,
-    )
-    parser.add_argument(
-        "--gimbal_lock_threshold",
-        type=float,
-        help="The threshold to determine if the joints are in gimbal lock position (in radian)",
-        default=None,  # 0.2,
-    )
-    parser.add_argument(
-        "--gimbal_lock_time",
-        type=float,
-        help="The time duration to consider as gimbal lock (in seconds)",
-        default=0.5,
-    )
-    parser.add_argument(
-        "--joint_limit_time",
-        type=float,
-        help=(
-            "The time (s) maximum allows if more-than-3 joints are reaching joint limits. It possibly due to the"
-            " retargeting failure."
-        ),
-        default=0.5,
-    )
-    parser.add_argument(
-        "--max_joint_vel",
-        type=float,
-        help="The maximum joint velocity, whenever it is reached",
-        default=30.0,
-    )
-    return parser
-
-
 def entry_point() -> None:
     """CLI entry point for ``instinct-amass-filter``."""
-    args = _build_parser().parse_args()
+    args = tyro.cli(AmassFilterConfig, config=mjlab.TYRO_FLAGS)
     main(args)
 
 

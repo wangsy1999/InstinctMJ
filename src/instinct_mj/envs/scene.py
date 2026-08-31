@@ -13,13 +13,13 @@ class InstinctScene(Scene):
         if self._cfg.terrain is None:
             return
         terrain_cfg = self._cfg.terrain
-        terrain_cfg.num_envs = self._cfg.num_envs
-        terrain_cfg.env_spacing = self._cfg.env_spacing
+        terrain_cfg.num_envs = self.num_envs
+        terrain_cfg.env_spacing = self.env_spacing
         if isinstance(terrain_cfg, TerrainImporterCfg):
-            terrain = terrain_cfg.class_type(terrain_cfg, device=self._device)
+            terrain = terrain_cfg.class_type(terrain_cfg, device=self.device)
         else:
-            terrain = TerrainEntity(terrain_cfg, device=self._device)
+            terrain = TerrainEntity(terrain_cfg, device=self.device)
         self._terrain = terrain
-        self._entities["terrain"] = terrain
-        frame = self._spec.worldbody.add_frame()
-        self._spec.attach(terrain.spec, prefix="", frame=frame)
+        self.entities["terrain"] = terrain
+        frame = self.spec.worldbody.add_frame()
+        self.spec.attach(terrain.spec, prefix="", frame=frame)

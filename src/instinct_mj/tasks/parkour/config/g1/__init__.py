@@ -7,7 +7,7 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .agents.instinct_rl_amp_cfg import G1ParkourPPORunnerCfg
+from .rl_cfg import g1_parkour_amp_instinct_rl_cfg
 
 
 def _parkour_amp_env_cfg(play: bool, shoe: bool = True):
@@ -20,7 +20,7 @@ register_instinct_task(
     task_id="Instinct-Parkour-Target-Amp-G1-v0",
     env_cfg_factory=lambda: _parkour_amp_env_cfg(play=False, shoe=True),
     play_env_cfg_factory=lambda: _parkour_amp_env_cfg(play=True, shoe=True),
-    instinct_rl_cfg_factory=G1ParkourPPORunnerCfg,
+    instinct_rl_cfg_factory=g1_parkour_amp_instinct_rl_cfg,
 )
 
 
@@ -28,5 +28,5 @@ register_instinct_task(
     task_id="Instinct-Parkour-Target-Amp-G1-Play-v0",
     env_cfg_factory=lambda: _parkour_amp_env_cfg(play=True, shoe=True),
     play_env_cfg_factory=lambda: _parkour_amp_env_cfg(play=True, shoe=True),
-    instinct_rl_cfg_factory=G1ParkourPPORunnerCfg,
+    instinct_rl_cfg_factory=g1_parkour_amp_instinct_rl_cfg,
 )

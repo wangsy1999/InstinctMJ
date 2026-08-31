@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
+
+import tyro
 
 
 def rename_file_contents(root_dir_path: str, old_name: str, new_name: str, exclude_dirs: list = []):
@@ -28,14 +29,10 @@ def rename_file_contents(root_dir_path: str, old_name: str, new_name: str, exclu
                 file.write(file_contents)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python rename_template.py <new_name>")
-        sys.exit(1)
-
+def main(new_name: tyro.conf.Positional[str]) -> None:
+    """Rename the template package and replace package-name occurrences."""
     root_dir_path = str(Path(__file__).resolve().parent.parent.parent.parent)
     old_name = "instinct_mj"
-    new_name = sys.argv[1]
 
     print(f"Warning, this script will rename all instances of '{old_name}' to '{new_name}' in {root_dir_path}.")
     proceed = input("Proceed? (y/n): ")
@@ -54,3 +51,7 @@ if __name__ == "__main__":
         print(f"Done! Renamed all '{old_name}' -> '{new_name}'.")
     else:
         print("Aborting.")
+
+
+if __name__ == "__main__":
+    tyro.cli(main)

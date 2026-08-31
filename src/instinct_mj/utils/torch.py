@@ -43,6 +43,21 @@ class ConcatBatchTensor:
         self._batch_starts[1:] = _batch_cuts[:-1]
         self._batch_ends = _batch_cuts.to(torch.int64).to(device)
 
+    @property
+    def concatenated_tensor(self) -> torch.Tensor:
+        """Get the concatenated backing tensor."""
+        return self._concatenated_tensor
+
+    @property
+    def batch_sizes(self) -> torch.Tensor:
+        """Get the length of each original tensor."""
+        return self._batch_sizes
+
+    @property
+    def batch_starts(self) -> torch.Tensor:
+        """Get the starting offset of each original tensor."""
+        return self._batch_starts
+
     def __getitem__(self, idx):
         """Get the data tensor at the given batch index."""
         if isinstance(idx, tuple):

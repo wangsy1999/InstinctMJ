@@ -1,3 +1,7 @@
+"""Instinct-RL configuration for the G1 locomotion task."""
+
+# Empty __init__.py
+
 from dataclasses import dataclass, field
 
 from instinct_mj.rl import (
@@ -58,3 +62,7 @@ class G1FlatPPORunnerCfg(InstinctRlOnPolicyRunnerCfg):
     def __post_init__(self):
         self.resume = self.load_run is not None
         self.run_name = ""
+
+
+def g1_locomotion_instinct_rl_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    return G1FlatPPORunnerCfg()

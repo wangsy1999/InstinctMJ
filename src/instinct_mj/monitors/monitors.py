@@ -218,7 +218,7 @@ class RewardSumMonitorTerm(MonitorTerm):
 
     def __init__(self, cfg: MonitorTermCfg, env: ManagerBasedRlEnv):
         super().__init__(cfg, env)
-        self._reward_buf = env.reward_manager._reward_buf
+        self._reward_buf = env.reward_manager.reward_buf
 
     def get_log(self, is_episode=False) -> dict[str, float | torch.Tensor]:
         if is_episode:
@@ -419,9 +419,7 @@ class MotionReferenceMonitorTerm(MonitorTerm):
                 ),
             }
         else:
-            should_compute_sample_stat = (
-                self._env._sim_step_counter // self._env.cfg.decimation
-            ) % self.cfg.params.get(
+            should_compute_sample_stat = self._env.common_step_counter % self.cfg.params.get(
                 "sample_stat_interval", 10
             ) == 0  # type: ignore
             stat = {}

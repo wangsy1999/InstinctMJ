@@ -517,6 +517,8 @@ def g1_beyondmimic_plane_env_cfg(*, play: bool = False) -> beyondmimic_cfg.Beyon
                 geom_names_expr=(".*",),
                 contype=0,
                 conaffinity=0,
+                condim=3,
+                priority=0,
             ),
         )
         entities = {

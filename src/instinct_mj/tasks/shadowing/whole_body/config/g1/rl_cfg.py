@@ -1,3 +1,12 @@
+# Copyright (c) 2022-2024, The Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Instinct-RL configuration for the G1 whole-body shadowing task."""
+
+from __future__ import annotations
+
 import os
 
 from instinct_mj.rl import InstinctRlActorCriticCfg, InstinctRlOnPolicyRunnerCfg, InstinctRlPpoAlgorithmCfg
@@ -75,3 +84,7 @@ def G1MultiRewardShadowingPPORunnerCfg() -> InstinctRlOnPolicyRunnerCfg:
     """Return the multi-reward PPO runner config."""
 
     return g1_multi_reward_shadowing_ppo_runner_cfg()
+
+
+def g1_shadowing_instinct_rl_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    return g1_shadowing_ppo_runner_cfg()

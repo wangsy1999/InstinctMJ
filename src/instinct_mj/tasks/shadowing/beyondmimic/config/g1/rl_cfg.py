@@ -1,3 +1,7 @@
+"""Instinct-RL configuration for the G1 BeyondMimic task."""
+
+from __future__ import annotations
+
 import os
 
 from instinct_mj.rl import InstinctRlActorCriticCfg, InstinctRlOnPolicyRunnerCfg, InstinctRlPpoAlgorithmCfg
@@ -58,4 +62,8 @@ def g1_beyondmimic_ppo_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
 def G1BeyondMimicPPORunnerCfg() -> InstinctRlOnPolicyRunnerCfg:
     """Return the G1 BeyondMimic PPO runner config."""
 
+    return g1_beyondmimic_ppo_runner_cfg()
+
+
+def g1_beyondmimic_instinct_rl_cfg() -> InstinctRlOnPolicyRunnerCfg:
     return g1_beyondmimic_ppo_runner_cfg()

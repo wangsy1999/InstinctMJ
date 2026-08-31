@@ -37,6 +37,7 @@ class MultiRewardManager(RewardManager):
             env: The environment instance.
             scale_by_dt: Whether to scale the reward by the environment step dt.
         """
+        self.scale_rewards_by_dt = scale_by_dt
         super().__init__(cfg, env, scale_by_dt=scale_by_dt)
         # prepare extra info to store individual reward term information
         self._episode_sums = dict()
@@ -92,6 +93,11 @@ class MultiRewardManager(RewardManager):
         return self.__group_term_names
 
     @property
+    def reward_buf(self) -> dict[str, torch.Tensor]:
+        """Get the current reward buffer for each reward group."""
+        return self._reward_buf
+
+    @property
     def num_rewards(self) -> int:
         """Get the number of reward groups."""
         return len(self.__group_term_names)
@@ -127,7 +133,7 @@ class MultiRewardManager(RewardManager):
         Returns:
             A dict or reward signal with shape (num_envs,) for each reward group.
         """
-        scale = dt if self._scale_by_dt else 1.0
+        scale = dt if self.scale_rewards_by_dt else 1.0
         for group_name in self.__group_term_cfgs.keys():
             term_combine_method = self.__group_term_combine_methods.get(group_name, "sum")
             if term_combine_method == "sum":

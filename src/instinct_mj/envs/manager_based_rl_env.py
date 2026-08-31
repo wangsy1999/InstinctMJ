@@ -52,14 +52,17 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         # Initialize the manual-reset state here because InstinctRlEnv
         # customizes scene construction instead of calling ManagerBasedRlEnv.__init__.
         self._manual_reset_pending = torch.zeros(self.cfg.scene.num_envs, dtype=torch.bool, device=device)
+        # Scratch buffer for per-env command dt; see ManagerBasedRlEnv.step().
+        self._command_dt = torch.zeros(self.cfg.scene.num_envs, device=device)
 
         # Use InstinctScene so terrain cfg.class_type is honored (e.g. hacked_generator importer).
         self.scene = InstinctScene(self.cfg.scene, device=device)
         self.sim = Simulation(
             num_envs=self.scene.num_envs,
             cfg=self.cfg.sim,
-            model=self.scene.compile(),
             device=device,
+            spec=self.scene.spec,
+            variant_info=self.scene.collect_variant_info(),
         )
 
         self.scene.initialize(
@@ -89,7 +92,13 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         self.render_mode = render_mode
         self._offline_renderer: OffscreenRenderer | None = None
         if self.render_mode == "rgb_array":
-            renderer = OffscreenRenderer(model=self.sim.mj_model, cfg=self.cfg.viewer, scene=self.scene)
+            renderer = OffscreenRenderer(
+                model=self.sim.mj_model,
+                cfg=self.cfg.viewer,
+                scene=self.scene,
+                sim_model=self.sim.model,
+                expanded_fields=self.sim.expanded_fields,
+            )
             renderer.initialize()
             self._offline_renderer = renderer
         self.metadata["render_fps"] = 1.0 / self.step_dt
@@ -187,3 +196,8 @@ class InstinctRlEnv(ManagerBasedRlEnv):
     @property
     def num_rewards(self) -> int:
         return getattr(self.reward_manager, "num_rewards", 1)
+
+    @property
+    def body_lin_acc_cache(self) -> dict[str, dict[str, object]]:
+        """Get the per-entity body linear acceleration cache."""
+        return self._instinct_body_lin_acc_cache

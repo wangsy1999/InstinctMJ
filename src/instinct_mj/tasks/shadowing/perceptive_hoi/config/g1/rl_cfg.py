@@ -1,7 +1,7 @@
 """Instinct-RL configs for G1 perceptive HOI shadowing tasks.
 
-Self-contained, mjlab-native port of the upstream
-``perceptive_hoi/config/g1/agents/instinct_rl_ppo_cfg.py``
+Self-contained, mjlab-native port of the InstinctLab source
+``InstinctLab/source/instinctlab/instinctlab/tasks/shadowing/perceptive_hoi/config/g1/agents/instinct_rl_ppo_cfg.py``
 (``G1PerceptiveHoiShadowingPPORunnerCfg``). The hyperparameters intentionally
 match the upstream HOI config exactly; upstream HOI shares the same numbers as
 the perceptive shadowing config and only differs by ``experiment_name``.

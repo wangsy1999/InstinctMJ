@@ -2,7 +2,7 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .rl_cfgs import g1_shadowing_instinct_rl_cfg
+from .rl_cfg import g1_shadowing_instinct_rl_cfg
 
 
 def _plane_shadowing_env_cfg(play: bool):

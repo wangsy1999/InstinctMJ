@@ -1,20 +1,74 @@
 from collections.abc import Sequence
 
 import torch
-from mjlab.utils.buffers import CircularBuffer
 
 
-class AsyncCircularBuffer(CircularBuffer):
+class AsyncCircularBuffer:
+    """Circular buffer with independent write pointers for each batch row.
+
+    This is an InstinctLab-specific buffer. It is implemented independently so
+    its asynchronous write behavior does not depend on ``mjlab.CircularBuffer``
+    internals.
+    """
+
     def __init__(self, max_len: int, batch_size: int, device: str):
-        super().__init__(max_len, batch_size, device)
-        # Keep per-batch pointers for asynchronous writes.
-        self._pointer = -torch.ones(self._batch_size, dtype=torch.long, device=self._device)
+        if max_len < 1:
+            raise ValueError(f"Buffer size must be >= 1, got {max_len}")
+
+        self._max_len = max_len
+        self._batch_size = batch_size
+        self._device = device
+        self._pointer = -torch.ones(batch_size, dtype=torch.long, device=device)
+        self._buffer: torch.Tensor | None = None
+        self._all_indices = torch.arange(batch_size, device=device)
+        self._num_pushes = torch.zeros(batch_size, dtype=torch.long, device=device)
+        self._max_len_tensor = torch.full((batch_size,), max_len, dtype=torch.long, device=device)
+
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
+    @property
+    def device(self) -> str:
+        return self._device
+
+    @property
+    def max_length(self) -> int:
+        return self._max_len
+
+    @property
+    def current_length(self) -> torch.Tensor:
+        """Per-batch count of valid frames."""
+        return torch.minimum(self._num_pushes, self._max_len_tensor)
+
+    @property
+    def is_initialized(self) -> bool:
+        """Whether storage has been allocated by an append."""
+        return self._buffer is not None
 
     @property
     def buffer(self) -> torch.Tensor:
         if torch.any(self._num_pushes == 0):
             raise RuntimeError("Attempting to access a buffer that is not fully initialized.")
         return self.get_by_batch_ids()
+
+    def reset(self, batch_ids: Sequence[int] | torch.Tensor | None = None) -> None:
+        """Zero values and counters for the selected batch rows."""
+        ids: Sequence[int] | torch.Tensor | slice = slice(None) if batch_ids is None else batch_ids
+        self._num_pushes[ids] = 0
+        if self._buffer is not None:
+            self._buffer[:, ids] = 0.0
+
+    def backfill(self, data: torch.Tensor, batch_ids: torch.Tensor) -> None:
+        """Fill selected rows' complete history without advancing their pointers."""
+        if data.shape[0] != self._batch_size:
+            raise ValueError(f"Expected batch size {self._batch_size}, got {data.shape[0]}")
+        if self._buffer is None:
+            raise RuntimeError("Buffer not initialized. Call append() first.")
+
+        data = data.to(self._device)
+        self._buffer[:, batch_ids] = data[batch_ids].unsqueeze(0)
+        self._num_pushes[batch_ids] = 1
 
     def get_by_batch_ids(self, batch_ids: Sequence[int] | None = None) -> torch.Tensor:
         # Index seems too large, potentially needing speed optimization. But we may wait and see.
