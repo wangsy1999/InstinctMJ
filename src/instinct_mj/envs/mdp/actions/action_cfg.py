@@ -20,3 +20,7 @@ class ActionOverridenJointPositionActionCfg(JointPositionActionCfg):
 
     override_value: float = 0.0
     """Delay in frames before the action is overridden. Defaults to 0."""
+
+    def build(self, env) -> ActionTerm:
+        """Build the action term from this config (mjlab ActionTermCfg interface)."""
+        return self.class_type(self, env)

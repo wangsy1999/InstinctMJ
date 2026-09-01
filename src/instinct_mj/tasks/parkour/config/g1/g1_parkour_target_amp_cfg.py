@@ -45,7 +45,7 @@ from instinct_mj.assets.unitree_g1 import (
     beyondmimic_action_scale,
     beyondmimic_g1_29dof_delayed_actuator_cfgs,
 )
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.motion_reference.motion_files.amass_motion_cfg import AmassMotionCfg as AmassMotionCfgBase
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
@@ -153,7 +153,7 @@ class G1ParkourSceneCfg(SceneCfg):
 
 
 @dataclass(kw_only=True)
-class G1ParkourAmpEnvCfg(InstinctLabRLEnvCfg):
+class G1ParkourAmpEnvCfg(InstinctRlEnvCfg):
     """Dictionary-manager environment configuration for G1 Parkour AMP."""
 
     scene: G1ParkourSceneCfg = field(default_factory=G1ParkourSceneCfg)

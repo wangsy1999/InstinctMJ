@@ -2,13 +2,17 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .rl_cfg import g1_locomotion_instinct_rl_cfg
-
 
 def _locomotion_flat_env_cfg(play: bool):
     from .flat_env_cfg import instinct_g1_locomotion_flat_env_cfg
 
     return instinct_g1_locomotion_flat_env_cfg(play=play)
+
+
+def g1_locomotion_instinct_rl_cfg():
+    from .rl_cfg import g1_locomotion_instinct_rl_cfg as _cfg
+
+    return _cfg()
 
 
 register_instinct_task(

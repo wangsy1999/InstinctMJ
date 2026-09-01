@@ -22,7 +22,7 @@ from mjlab.managers import (
 )
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 from mjlab.viewer.viewer_config import ViewerConfig

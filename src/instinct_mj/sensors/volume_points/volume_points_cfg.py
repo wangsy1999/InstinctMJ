@@ -55,4 +55,4 @@ class VolumePointsCfg(SensorCfg):
     visualizer_cfg: VisualizationMarkersCfg = field(default_factory=lambda: VOLUME_POINTS_VISUALIZER_CFG)
 
     def build(self) -> VolumePoints:
-        return VolumePoints(self)
+        return self.class_type(self)

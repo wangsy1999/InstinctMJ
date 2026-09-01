@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from mjlab.terrains import TerrainEntityCfg as TerrainImporterCfgBase
-
+from .terrain_entity_cfg import TerrainEntityCfg as TerrainImporterCfgBase
 from .terrain_importer import TerrainImporter
 from .virtual_obstacle import VirtualObstacleCfg
 

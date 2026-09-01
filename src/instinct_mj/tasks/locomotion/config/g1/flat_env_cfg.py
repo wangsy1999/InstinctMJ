@@ -19,7 +19,7 @@ from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer.viewer_config import ViewerConfig
 
@@ -30,7 +30,7 @@ from instinct_mj.assets.unitree_g1 import (
     beyondmimic_action_scale,
     beyondmimic_g1_29dof_actuator_cfgs,
 )
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
 
@@ -366,7 +366,7 @@ def _curriculum_cfg() -> dict[str, CurrTerm]:
 
 
 @dataclass(kw_only=True)
-class G1LocomotionFlatEnvCfg(InstinctLabRLEnvCfg):
+class G1LocomotionFlatEnvCfg(InstinctRlEnvCfg):
     scene: G1LocomotionSceneCfg = field(default_factory=lambda: _scene_cfg(play=False))
     actions: dict = field(default_factory=_actions_cfg)
     commands: dict = field(default_factory=_commands_cfg)

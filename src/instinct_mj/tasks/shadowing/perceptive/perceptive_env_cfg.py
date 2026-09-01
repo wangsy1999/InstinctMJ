@@ -25,7 +25,7 @@ from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
@@ -954,7 +954,7 @@ def make_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class PerceptiveShadowingEnvCfg(InstinctLabRLEnvCfg):
+class PerceptiveShadowingEnvCfg(InstinctRlEnvCfg):
     scene: PerceptiveShadowingSceneCfg = field(default_factory=lambda: PerceptiveShadowingSceneCfg())
     decimation: int = 4
     commands: dict = field(default_factory=make_perceptive_commands)

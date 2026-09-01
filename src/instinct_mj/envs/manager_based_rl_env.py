@@ -10,9 +10,7 @@ from mjlab.viewer.debug_visualizer import DebugVisualizer
 from mjlab.viewer.offscreen_renderer import OffscreenRenderer
 from prettytable import PrettyTable
 
-from instinct_mj.envs.scene import InstinctScene
-from instinct_mj.managers import MultiRewardCfg, MultiRewardManager
-from instinct_mj.monitors import MonitorManager
+from instinct_mj.managers import MultiRewardCfg
 
 
 class InstinctRlEnv(ManagerBasedRlEnv):
@@ -42,7 +40,7 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         self._command_dt = torch.zeros(self.cfg.scene.num_envs, device=device)
 
         # Use InstinctScene so terrain cfg.class_type is honored (e.g. hacked_generator importer).
-        self.scene = InstinctScene(self.cfg.scene, device=device)
+        self.scene = self.cfg.scene_class_type(self.cfg.scene, device=device)
         self.sim = Simulation(
             num_envs=self.scene.num_envs,
             cfg=self.cfg.sim,
@@ -102,14 +100,14 @@ class InstinctRlEnv(ManagerBasedRlEnv):
 
         if "reward_group_cfg" in locals():
             self.cfg.rewards = reward_group_cfg
-            self.reward_manager = MultiRewardManager(
+            self.reward_manager = self.cfg.multi_reward_manager_class_type(
                 self.cfg.rewards,
                 self,
                 scale_by_dt=self.cfg.scale_rewards_by_dt,
             )
             print_info(f"[INFO] {self.reward_manager}")
 
-        self.monitor_manager = MonitorManager(self.cfg.monitors, self)
+        self.monitor_manager = self.cfg.monitor_manager_class_type(self.cfg.monitors, self)
         print_info(f"[INFO] Monitor Manager: {self.monitor_manager}")
 
     def setup_manager_visualizers(self) -> None:

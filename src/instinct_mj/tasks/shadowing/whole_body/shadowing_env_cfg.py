@@ -15,13 +15,15 @@ from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, SensorCfg
-from mjlab.terrains import TerrainEntityCfg, TerrainGeneratorCfg
+from mjlab.terrains import TerrainGeneratorCfg
+
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
 import instinct_mj.tasks.shadowing.mdp as shadowing_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     BodyStatMonitorTerm,
@@ -644,7 +646,7 @@ def make_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class ShadowingEnvCfg(InstinctLabRLEnvCfg):
+class ShadowingEnvCfg(InstinctRlEnvCfg):
     """Configuration for the shadowing environment."""
 
     scene: ShadowingSceneCfg = field(default_factory=lambda: ShadowingSceneCfg(num_envs=4096))

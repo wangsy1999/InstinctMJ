@@ -28,9 +28,15 @@ from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer
 
 import instinct_mj.tasks  # noqa: F401
-from instinct_mj.envs import InstinctRlEnv
-from instinct_mj.rl import InstinctRlOnPolicyRunnerCfg, InstinctRlVecEnvWrapper
-from instinct_mj.tasks.registry import list_tasks, load_env_cfg, load_instinct_rl_cfg, load_runner_cls
+from instinct_mj.rl import InstinctRlOnPolicyRunnerCfg
+from instinct_mj.tasks.registry import (
+    list_tasks,
+    load_env_cfg,
+    load_env_cls,
+    load_instinct_rl_cfg,
+    load_runner_cls,
+    load_vecenv_cls,
+)
 
 
 def _to_yaml_data(data: Any) -> Any:
@@ -123,7 +129,8 @@ def _resolve_distributed_runtime(
 def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     log_dir = log_dir.expanduser().resolve()
 
-    if InstinctRlVecEnvWrapper is None:
+    vecenv_cls = load_vecenv_cls(task_id)
+    if vecenv_cls is None:
         raise ImportError(
             "InstinctRlVecEnvWrapper is unavailable. Please install runtime deps:\n"
             '  pip install -e "git+https://github.com/mujocolab/mjlab.git#egg=mjlab"\n'
@@ -192,7 +199,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     if rank == 0:
         print(f"[INFO] Logging to: {log_dir}")
 
-    env = InstinctRlEnv(
+    env_cls = load_env_cls(task_id)
+    env = env_cls(
         cfg=cfg.env,
         device=device,
         render_mode="rgb_array" if video_enabled else None,
@@ -208,7 +216,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
         )
         print("[INFO] Recording videos during training.")
 
-    vec_env = InstinctRlVecEnvWrapper(
+    vec_env = vecenv_cls(
         env,
         policy_group=cfg.agent.policy_observation_group,
         critic_group=cfg.agent.critic_observation_group,

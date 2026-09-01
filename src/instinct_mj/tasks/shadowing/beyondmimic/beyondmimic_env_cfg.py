@@ -10,12 +10,12 @@ from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, SensorCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
@@ -585,7 +585,7 @@ def make_beyondmimic_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
+class BeyondMimicEnvCfg(InstinctRlEnvCfg):
     """Configuration for the BeyondMimic environment."""
 
     scene: BeyondMimicSceneCfg = field(default_factory=lambda: BeyondMimicSceneCfg(num_envs=4096))

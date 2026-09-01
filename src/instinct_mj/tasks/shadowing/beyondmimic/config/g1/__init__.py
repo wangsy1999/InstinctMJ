@@ -2,13 +2,17 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .rl_cfg import g1_beyondmimic_instinct_rl_cfg
-
 
 def _beyondmimic_plane_env_cfg(play: bool):
     from .beyondmimic_plane_cfg import g1_beyondmimic_plane_env_cfg
 
     return g1_beyondmimic_plane_env_cfg(play=play)
+
+
+def g1_beyondmimic_instinct_rl_cfg():
+    from .rl_cfg import g1_beyondmimic_instinct_rl_cfg as _cfg
+
+    return _cfg()
 
 
 register_instinct_task(

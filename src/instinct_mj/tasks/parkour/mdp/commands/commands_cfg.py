@@ -67,4 +67,4 @@ class PoseVelocityCommandCfg(CommandTermCfg):
     """Whether to visualize all flat patches (can be expensive with many patches)."""
 
     def build(self, env):
-        return PoseVelocityCommand(self, env)
+        return self.class_type(self, env)

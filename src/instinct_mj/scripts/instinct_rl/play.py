@@ -20,9 +20,15 @@ from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 
 import instinct_mj.tasks  # noqa: F401
-from instinct_mj.envs import InstinctRlEnv
 from instinct_mj.rl import InstinctRlVecEnvWrapper
-from instinct_mj.tasks.registry import list_tasks, load_env_cfg, load_instinct_rl_cfg, load_runner_cls
+from instinct_mj.tasks.registry import (
+    list_tasks,
+    load_env_cfg,
+    load_env_cls,
+    load_instinct_rl_cfg,
+    load_runner_cls,
+    load_vecenv_cls,
+)
 
 
 @dataclass(frozen=True)
@@ -370,7 +376,8 @@ def _run_headless_rollout(
 
 
 def run_play(task_id: str, cfg: PlayConfig) -> None:
-    if InstinctRlVecEnvWrapper is None:
+    vecenv_cls = load_vecenv_cls(task_id)
+    if vecenv_cls is None:
         raise ImportError(
             "InstinctRlVecEnvWrapper is unavailable. Please install runtime deps:\n"
             '  pip install -e "git+https://github.com/mujocolab/mjlab.git#egg=mjlab"\n'
@@ -420,7 +427,8 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
     elif cfg.export_onnx:
         raise ValueError("`--export-onnx` only supports `--agent trained`.")
 
-    env = InstinctRlEnv(
+    env_cls = load_env_cls(task_id)
+    env = env_cls(
         cfg=env_cfg,
         device=device,
         render_mode="rgb_array" if cfg.video else None,
@@ -442,7 +450,7 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
         )
         print(f"[INFO] Recording play video to: {video_dir}")
 
-    vec_env = InstinctRlVecEnvWrapper(
+    vec_env = vecenv_cls(
         env,
         policy_group=agent_cfg.policy_observation_group,
         critic_group=agent_cfg.critic_observation_group,

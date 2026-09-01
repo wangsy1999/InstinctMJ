@@ -12,6 +12,3 @@ class NoisyGroupedRayCasterCameraCfg(NoisyCameraCfgMixin, GroupedRayCasterCamera
     """
 
     class_type: type = NoisyGroupedRayCasterCamera
-
-    def build(self) -> NoisyGroupedRayCasterCamera:
-        return NoisyGroupedRayCasterCamera(self)

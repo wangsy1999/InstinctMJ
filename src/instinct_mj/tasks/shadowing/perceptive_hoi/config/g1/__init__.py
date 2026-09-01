@@ -2,7 +2,11 @@
 
 from instinct_mj.tasks.registry import register_instinct_task
 
-from .rl_cfg import g1_perceptive_hoi_shadowing_instinct_rl_cfg
+
+def g1_perceptive_hoi_shadowing_instinct_rl_cfg():
+    from .rl_cfg import g1_perceptive_hoi_shadowing_instinct_rl_cfg as _cfg
+
+    return _cfg()
 
 
 def _perceptive_hoi_shadowing_env_cfg():
