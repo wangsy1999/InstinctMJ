@@ -38,6 +38,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 import instinct_mj.envs.mdp as envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
 from instinct_mj.assets.unitree_g1 import (
+    G1_29DOF_JOINT_VELOCITY_LIMITS,
     G1_MJCF_PATH,
     G1_29Dof_TorsoBase_symmetric_augmentation_joint_mapping,
     G1_29Dof_TorsoBase_symmetric_augmentation_joint_reverse_buf,
@@ -45,6 +46,7 @@ from instinct_mj.assets.unitree_g1 import (
     beyondmimic_g1_29dof_delayed_actuator_cfgs,
 )
 from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.motion_reference.motion_files.amass_motion_cfg import AmassMotionCfg as AmassMotionCfgBase
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
 from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
@@ -158,7 +160,7 @@ class G1ParkourAmpEnvCfg(InstinctLabRLEnvCfg):
     decimation: int = 4
     observations: dict = field(default_factory=dict)
     actions: dict = field(default_factory=dict)
-    rewards: dict = field(default_factory=lambda: {"rewards": {}})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": {}}))
     terminations: dict = field(default_factory=dict)
     commands: dict = field(default_factory=dict)
     events: dict = field(default_factory=dict)
@@ -205,7 +207,7 @@ def instinct_g1_parkour_amp_env_cfg(
         sim=tracking_cfg.sim,
         viewer=tracking_cfg.viewer,
         episode_length_s=tracking_cfg.episode_length_s,
-        rewards={"rewards": tracking_cfg.rewards},
+        rewards=MultiRewardCfg({"rewards": tracking_cfg.rewards}),
         terminations=tracking_cfg.terminations,
         commands=tracking_cfg.commands,
         curriculum=tracking_cfg.curriculum,
@@ -406,7 +408,7 @@ def instinct_g1_parkour_amp_env_cfg(
                     "ang_vel_z": (-1.0, 1.0),
                 },
                 "boxes": {"lin_vel_x": (0.45, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "dense_boxes": {"lin_vel_x": (0.45, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "mesh_boxes": {"lin_vel_x": (0.45, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
                 "hf_pyramid_slope_inv": {
                     "lin_vel_x": (0.45, 0.8),
                     "lin_vel_y": (0.0, 0.0),
@@ -653,7 +655,7 @@ def instinct_g1_parkour_amp_env_cfg(
         enable_corruption=False,
     )
 
-    cfg.rewards = {
+    cfg.rewards = MultiRewardCfg({
         "rewards": {
             # ---------- Task rewards ----------
             "track_lin_vel_xy_exp": RewardTermCfg(
@@ -811,6 +813,15 @@ def instinct_g1_parkour_amp_env_cfg(
                 weight=-1.0,
                 params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
             ),
+            "dof_vel_limits": RewardTermCfg(
+                func=parkour_mdp.joint_vel_limits,
+                weight=-1.0,
+                params={
+                    "soft_ratio": 0.9,
+                    "velocity_limits": G1_29DOF_JOINT_VELOCITY_LIMITS,
+                    "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+                },
+            ),
             "torque_limits": RewardTermCfg(
                 func=parkour_mdp.applied_torque_limits_by_ratio,
                 weight=-0.01,
@@ -825,7 +836,7 @@ def instinct_g1_parkour_amp_env_cfg(
                 params={"sensor_name": "undesired_contact_forces", "threshold": 1.0},
             ),
         }
-    }
+    })
     cfg.curriculum = {
         "terrain_levels": CurriculumTermCfg(
             func=parkour_mdp.tracking_exp_vel,

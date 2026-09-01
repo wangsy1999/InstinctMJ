@@ -26,6 +26,7 @@ from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
 from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
     MotionReferenceMonitorTerm,
@@ -54,6 +55,7 @@ from instinct_mj.utils.noise import (
 )
 
 # PROPRIO_HISTORY_LENGTH = 0
+PROPRIO_HISTORY_LENGTH = 8
 
 
 def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
@@ -472,13 +474,13 @@ def make_observations() -> dict[str, ObsGroupCfg]:
         "projected_gravity": ObsTermCfg(
             func=mdp.projected_gravity,
             noise=UniformNoiseCfg(n_min=-0.05, n_max=0.05),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         # base_lin_vel = ObsTermCfg(func=mdp.base_lin_vel)
         "base_ang_vel": ObsTermCfg(
             func=mdp.base_ang_vel,
             noise=UniformNoiseCfg(n_min=-0.2, n_max=0.2),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_pos": ObsTermCfg(
             func=mdp.joint_pos_rel,
@@ -486,7 +488,7 @@ def make_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.01, n_max=0.01),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_vel": ObsTermCfg(
             func=mdp.joint_vel_rel,
@@ -494,11 +496,11 @@ def make_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.5, n_max=0.5),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "last_action": ObsTermCfg(
             func=mdp.last_action,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
     }
 
@@ -524,29 +526,29 @@ def make_observations() -> dict[str, ObsGroupCfg]:
         ),
         "base_lin_vel": ObsTermCfg(
             func=mdp.base_lin_vel,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "base_ang_vel": ObsTermCfg(
             func=mdp.base_ang_vel,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_pos": ObsTermCfg(
             func=mdp.joint_pos_rel,
             params={
                 "asset_cfg": SceneEntityCfg("robot"),
             },
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_vel": ObsTermCfg(
             func=mdp.joint_vel_rel,
             params={
                 "asset_cfg": SceneEntityCfg("robot"),
             },
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "last_action": ObsTermCfg(
             func=mdp.last_action,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
     }
 
@@ -958,7 +960,7 @@ class PerceptiveShadowingEnvCfg(InstinctLabRLEnvCfg):
     commands: dict = field(default_factory=make_perceptive_commands)
     actions: dict = field(default_factory=make_actions)
     observations: dict = field(default_factory=make_observations)
-    rewards: dict = field(default_factory=lambda: {"rewards": make_rewards()})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": make_rewards()}))
     events: dict = field(default_factory=make_events)
     curriculum: dict = field(default_factory=make_curriculum)
     terminations: dict = field(default_factory=make_terminations)

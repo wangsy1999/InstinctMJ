@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
-from mjlab.managers import SceneEntityCfg
+from mjlab.managers import RewardTermCfg, SceneEntityCfg
 from mjlab.sensor import ContactSensor, RayCastSensor
 from mjlab.utils.lab_api.math import quat_apply_inverse
+from mjlab.utils.lab_api.string import resolve_matching_names_values
 
 from instinct_mj.envs.mdp.rewards.regularizations import (
     applied_torque_limits_by_ratio as _applied_torque_limits_by_ratio_general,
@@ -298,6 +299,36 @@ def applied_torque_limits_by_ratio(
         asset_cfg=asset_cfg,
         limit_ratio=limit_ratio,
     )
+
+
+class joint_vel_limits:
+    """Penalize joints exceeding their soft velocity limits.
+
+    The source limits come from URDF metadata that has no MJCF field. Resolve
+    the configured name-to-limit mapping once, following mjlab's native
+    class-based reward-term pattern.
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+        asset: Entity = env.scene[cfg.params["asset_cfg"].name]
+        _, joint_names = asset.find_joints(cfg.params["asset_cfg"].joint_names)
+        _, _, velocity_limits = resolve_matching_names_values(
+            data=cfg.params["velocity_limits"],
+            list_of_strings=joint_names,
+        )
+        self.velocity_limits = torch.tensor(velocity_limits, device=env.device, dtype=torch.float32)
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        soft_ratio: float,
+        velocity_limits: dict[str, float],
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    ) -> torch.Tensor:
+        del velocity_limits  # Resolved once in __init__.
+        asset: Entity = env.scene[asset_cfg.name]
+        out_of_limits = torch.abs(asset.data.joint_vel[:, asset_cfg.joint_ids]) - self.velocity_limits * soft_ratio
+        return torch.sum(torch.clamp(out_of_limits, min=0.0, max=1.0), dim=1)
 
 
 def undesired_contacts(

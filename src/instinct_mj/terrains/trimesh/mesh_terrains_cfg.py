@@ -4,6 +4,8 @@ from typing import List
 import mujoco
 import numpy as np
 from mjlab.terrains import SubTerrainCfg as SubTerrainBaseCfg
+from instinct_mj.terrains.height_field.hf_terrains_cfg import PerlinPlaneTerrainCfg
+
 
 from . import mesh_terrains
 
@@ -15,6 +17,35 @@ class WallTerrainCfgMixin:
     )  # Probability of generating walls on [left, right, front, back] sides
     wall_height: float = 5.0  # Height of the walls
     wall_thickness: float = 0.05  # Thickness of the walls
+
+@dataclass(kw_only=True)
+class PerlinMeshRandomMultiBoxTerrainCfg(SubTerrainBaseCfg, WallTerrainCfgMixin):
+    """Configuration for a sub-terrain with multiple random boxes and optional Perlin noise."""
+
+    box_height_mean: tuple[float, float] | float = MISSING
+    box_height_range: float = MISSING
+    box_length_mean: tuple[float, float] | float = MISSING
+    box_length_range: float = MISSING
+    box_width_mean: tuple[float, float] | float = MISSING
+    box_width_range: float = MISSING
+    platform_width: float = MISSING
+    generation_ratio: float = MISSING
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+    horizontal_scale: float = 0.1
+    vertical_scale: float = 0.005
+    slope_threshold: float | None = None
+    no_perlin_at_obstacle: bool = False
+    box_perlin_cfg: PerlinPlaneTerrainCfg | None = None
+    """Used only when perlin_cfg is not None."""
+
+    def function(
+        self,
+        difficulty: float,
+        spec: mujoco.MjSpec,
+        rng: np.random.Generator,
+    ):
+        return mesh_terrains.random_multi_box_terrain(self, difficulty, spec, rng)
+
 
 
 @dataclass(kw_only=True)

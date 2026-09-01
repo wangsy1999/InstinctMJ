@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mjlab.envs.manager_based_rl_env import ManagerBasedRlEnvCfg
-from mjlab.managers import RewardTermCfg
 from mjlab.viewer.viewer_config import ViewerConfig
 
 
@@ -11,8 +10,8 @@ from mjlab.viewer.viewer_config import ViewerConfig
 class InstinctLabRLEnvCfg(ManagerBasedRlEnvCfg):
     """Configuration for a reinforcement learning environment with the manager-based workflow."""
 
-    rewards: dict[str, dict[str, RewardTermCfg | str | None]] = field(default_factory=dict)
-    """Reward groups consumed directly by :class:`MultiRewardManager`."""
+    rewards: dict = field(default_factory=dict)
+    """Reward terms or marked multi-reward groups."""
 
     viewer: ViewerConfig = field(default_factory=ViewerConfig)
     """Viewer Settings."""

@@ -116,6 +116,24 @@ ACTUATOR_7520_22_EFFORT_LIMIT = 139.0
 ACTUATOR_4010_EFFORT_LIMIT = 5.0
 ACTUATOR_DUAL_5020_EFFORT_LIMIT = ACTUATOR_5020_EFFORT_LIMIT * 2.0
 
+# Joint velocity limits from the source G1 URDF. MuJoCo MJCF does not carry
+# URDF's limit.velocity field, so keep the values explicitly for reward terms
+# that preserve the InstinctLab soft velocity-limit semantics.
+G1_29DOF_JOINT_VELOCITY_LIMITS: dict[str, float] = {
+    ".*_hip_pitch_joint": 32.0,
+    ".*_hip_roll_joint": 20.0,
+    ".*_hip_yaw_joint": 32.0,
+    ".*_knee_joint": 20.0,
+    ".*_ankle_.*_joint": 37.0,
+    "waist_pitch_joint": 37.0,
+    "waist_roll_joint": 37.0,
+    "waist_yaw_joint": 32.0,
+    ".*_shoulder_.*_joint": 37.0,
+    ".*_elbow_joint": 37.0,
+    ".*_wrist_roll_joint": 37.0,
+    ".*_wrist_(pitch|yaw)_joint": 22.0,
+}
+
 # Following the principles of BeyondMimic, and the kp/kd computation logic.
 # NOTE: These logic are still being tested, so we put them here for substitution in users Cfg class.
 ARMATURE_5020 = 0.003609725
@@ -547,6 +565,7 @@ __all__ = [
     "G1_29DOF_TORSOBASE_CFG",
     "G1_29DOF_TORSOBASE_CLOG_CFG",
     "G1_29DOF_TORSOBASE_POPSICLE_CFG",
+    "G1_29DOF_JOINT_VELOCITY_LIMITS",
     "G1_MESHES_DIR",
     "G1_MJCF_PATH",
     "G1_29Dof_TorsoBase_symmetric_augmentation_joint_mapping",

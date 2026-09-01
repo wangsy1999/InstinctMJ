@@ -218,7 +218,7 @@ class RewardSumMonitorTerm(MonitorTerm):
 
     def __init__(self, cfg: MonitorTermCfg, env: ManagerBasedRlEnv):
         super().__init__(cfg, env)
-        self._reward_buf = env.reward_manager.reward_buf
+        self._reward_buf = env.reward_manager._reward_buf
 
     def get_log(self, is_episode=False) -> dict[str, float | torch.Tensor]:
         if is_episode:

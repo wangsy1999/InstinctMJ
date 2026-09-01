@@ -180,7 +180,7 @@ def maskout_joint_ref(
     # generate meshgrid for env_ids and joint_ids
     if isinstance(joint_ids, (list, tuple)):
         joint_ids = torch.tensor(joint_ids, dtype=torch.long, device=motion_reference.device)
-    env_ids_, joint_ids_ = torch.meshgrid(env_ids, joint_ids)
+    env_ids_, joint_ids_ = torch.meshgrid(env_ids, joint_ids, indexing="ij")
     env_ids_ = env_ids_.reshape(-1)
     joint_ids_ = joint_ids_.reshape(-1)
     # mask out the wrist reference data
@@ -204,7 +204,7 @@ def maskout_link_ref(
     motion_reference: MotionReferenceManager = env.scene[motion_ref_cfg.name]
     # generate meshgrid for env_ids and link_ids
     link_ids = torch.tensor(motion_ref_cfg.body_ids, dtype=torch.long, device=env_ids.device)
-    env_ids_, link_ids_ = torch.meshgrid(env_ids, link_ids)
+    env_ids_, link_ids_ = torch.meshgrid(env_ids, link_ids, indexing="ij")
     env_ids_ = env_ids_.reshape(-1)
     link_ids_ = link_ids_.reshape(-1)
     # mask out the link reference data

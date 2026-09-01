@@ -371,7 +371,7 @@ class G1LocomotionFlatEnvCfg(InstinctLabRLEnvCfg):
     actions: dict = field(default_factory=_actions_cfg)
     commands: dict = field(default_factory=_commands_cfg)
     observations: dict = field(default_factory=_observations_cfg)
-    rewards: dict = field(default_factory=lambda: {"rewards": _rewards_cfg()})
+    rewards: dict = field(default_factory=_rewards_cfg)
     terminations: dict = field(default_factory=_terminations_cfg)
     events: dict = field(default_factory=_events_cfg)
     curriculum: dict = field(default_factory=_curriculum_cfg)
@@ -405,7 +405,7 @@ class G1LocomotionFlatEnvCfg(InstinctLabRLEnvCfg):
         self.sim.njmax = 300
         joint_pos_action: JointPositionActionCfg = self.actions["joint_pos"]
         joint_pos_action.scale = copy.deepcopy(beyondmimic_action_scale)
-        reward_terms = self.rewards["rewards"]
+        reward_terms = self.rewards
         feet_air_time = reward_terms.get("feet_air_time")
         stand_still = reward_terms.get("stand_still")
         action_rate_l2 = reward_terms.get("action_rate_l2")

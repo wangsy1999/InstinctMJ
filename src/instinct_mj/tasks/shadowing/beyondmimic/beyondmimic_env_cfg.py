@@ -16,6 +16,7 @@ from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
 from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
     MotionReferenceMonitorTerm,
@@ -591,7 +592,7 @@ class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
     commands: dict = field(default_factory=make_beyondmimic_commands)
     actions: dict = field(default_factory=make_beyondmimic_actions)
     observations: dict = field(default_factory=make_beyondmimic_observations)
-    rewards: dict = field(default_factory=lambda: {"rewards": make_beyondmimic_rewards()})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": make_beyondmimic_rewards()}))
     events: dict = field(default_factory=make_beyondmimic_events)
     curriculum: dict = field(default_factory=make_beyondmimic_curriculum)
     terminations: dict = field(default_factory=make_beyondmimic_terminations)
