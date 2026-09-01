@@ -7,9 +7,8 @@ import os
 import signal
 import sys
 import tempfile
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -37,24 +36,7 @@ from instinct_mj.tasks.registry import (
     load_runner_cls,
     load_vecenv_cls,
 )
-
-
-def _to_yaml_data(data: Any) -> Any:
-    if isinstance(data, Enum):
-        return _to_yaml_data(data.value)
-    if is_dataclass(data):
-        return {item.name: _to_yaml_data(getattr(data, item.name)) for item in fields(data)}
-    if isinstance(data, dict):
-        return {str(key): _to_yaml_data(value) for key, value in data.items()}
-    if isinstance(data, tuple):
-        return [_to_yaml_data(value) for value in data]
-    if isinstance(data, list):
-        return [_to_yaml_data(value) for value in data]
-    if callable(data):
-        return f"{data.__module__}:{data.__qualname__}"
-    if isinstance(data, (str, int, float, bool)) or data is None:
-        return data
-    return repr(data)
+from instinct_mj.utils.dict import class_to_dict
 
 
 @dataclass(frozen=True)
@@ -271,8 +253,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
         runner.load(str(resume_path))
 
     if rank == 0:
-        dump_yaml(log_dir / "params" / "env.yaml", _to_yaml_data(cfg.env))
-        dump_yaml(log_dir / "params" / "agent.yaml", _to_yaml_data(cfg.agent))
+        dump_yaml(log_dir / "params" / "env.yaml", class_to_dict(cfg.env))
+        dump_yaml(log_dir / "params" / "agent.yaml", class_to_dict(cfg.agent))
     if train_viewer is not None:
         runner_rollout_step = runner.rollout_step
 
