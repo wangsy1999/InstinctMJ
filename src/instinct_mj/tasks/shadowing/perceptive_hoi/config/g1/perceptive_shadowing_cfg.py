@@ -124,6 +124,8 @@ def _make_hoi_entities(*, include_reference: bool = False) -> dict[str, EntityCf
                 geom_names_expr=(".*",),
                 contype=0,
                 conaffinity=0,
+                condim=3,
+                priority=0,
             ),
         )
         entities["robot_reference"] = robot_reference

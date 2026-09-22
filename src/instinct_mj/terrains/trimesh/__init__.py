@@ -1,1 +1,5 @@
-from .mesh_terrains_cfg import MotionMatchedTerrainCfg, STLHeightfieldTerrainCfg
+from .mesh_terrains_cfg import (
+    MotionMatchedTerrainCfg,
+    PerlinMeshRandomMultiBoxTerrainCfg,
+    STLHeightfieldTerrainCfg,
+)

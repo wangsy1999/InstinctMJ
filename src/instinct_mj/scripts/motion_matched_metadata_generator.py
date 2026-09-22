@@ -7,14 +7,27 @@ producing a metadata.yaml consumed by TerrainMotionCfg.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
+import mjlab
+import tyro
 import yaml
 
 SUPPORTED_MOTION_ENDINGS = ["poses.npz", "retargeted.npz"]
 SUPPORTED_TERRAIN_ENDINGS = ["ply", "stl"]
 
 
-def main(args):
+@dataclass(frozen=True)
+class MetadataConfig:
+    """Generate metadata for motion-matched terrain files."""
+
+    path: str
+    """Directory containing terrain files and motion files."""
+    output_yaml: str | None = None
+    """Output YAML file to save the metadata."""
+
+
+def main(cfg: MetadataConfig) -> None:
     """This is a function that automatically scans the terrain directory and log all terrain files
     and the motion files that are matched to them in a YAML file, as the metadata.yaml file for the TerrainMotionCfg.
 
@@ -42,12 +55,12 @@ def main(args):
     terrains = []
     motion_files = []
     terrain_id = 0
-    for root, _, files in os.walk(args.path, followlinks=True):
+    for root, _, files in os.walk(cfg.path, followlinks=True):
         # NOTE: assuming in a folder, there is only one terrain file
         for f in files:
             if any(f.endswith(ending) for ending in SUPPORTED_TERRAIN_ENDINGS):
                 terrain_file = os.path.join(root, f)
-                terrain_file = os.path.relpath(terrain_file, args.path)
+                terrain_file = os.path.relpath(terrain_file, cfg.path)
                 terrains.append(
                     {
                         "terrain_id": terrain_id,
@@ -58,7 +71,7 @@ def main(args):
         for f in files:
             if any(f.endswith(ending) for ending in SUPPORTED_MOTION_ENDINGS):
                 motion_file = os.path.join(root, f)
-                motion_file = os.path.relpath(motion_file, args.path)
+                motion_file = os.path.relpath(motion_file, cfg.path)
                 # search the motion file in current dir (root) whether it matches any terrain_id
                 potential_terrain_ids = [
                     os.path.splitext(f)[0]
@@ -84,33 +97,14 @@ def main(args):
         "motion_files": motion_files,
     }
     # Write the metadata to a YAML file
-    if args.output_yaml is None:
-        args.output_yaml = os.path.join(args.path, "metadata.yaml")
-    with open(args.output_yaml, "w") as yaml_file:
+    output_yaml = cfg.output_yaml if cfg.output_yaml is not None else os.path.join(cfg.path, "metadata.yaml")
+    with open(output_yaml, "w") as yaml_file:
         yaml.safe_dump(metadata, yaml_file)
 
 
 def entry_point() -> None:
     """CLI entry point for ``instinct-motion-metadata``."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Generate metadata for motion-matched terrain files.")
-    parser.add_argument(
-        "--path",
-        type=str,
-        required=True,
-        help="Directory containing terrain files and motion files.",
-    )
-    parser.add_argument(
-        "--output_yaml",
-        type=str,
-        required=False,
-        default=None,
-        help="Output YAML file to save the metadata.",
-    )
-
-    args = parser.parse_args()
-    main(args)
+    main(tyro.cli(MetadataConfig, config=mjlab.TYRO_FLAGS))
 
 
 if __name__ == "__main__":

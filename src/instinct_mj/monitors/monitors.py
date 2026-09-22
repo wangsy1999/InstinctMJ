@@ -419,9 +419,7 @@ class MotionReferenceMonitorTerm(MonitorTerm):
                 ),
             }
         else:
-            should_compute_sample_stat = (
-                self._env._sim_step_counter // self._env.cfg.decimation
-            ) % self.cfg.params.get(
+            should_compute_sample_stat = self._env.common_step_counter % self.cfg.params.get(
                 "sample_stat_interval", 10
             ) == 0  # type: ignore
             stat = {}

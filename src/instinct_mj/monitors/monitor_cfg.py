@@ -8,7 +8,7 @@ from .monitors import TorqueMonitorSensor
 
 @dataclass(kw_only=True)
 class MonitorSensorCfg:
-    class_type: type = None
+    class_type: type = MISSING
 
     update_period: float = 0.005  # update every decimation
 

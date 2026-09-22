@@ -22,7 +22,7 @@ from mjlab.managers import (
 )
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 from mjlab.viewer.viewer_config import ViewerConfig
@@ -30,6 +30,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 import instinct_mj.envs.mdp as instinct_mdp
 import instinct_mj.tasks.shadowing.whole_body.shadowing_env_cfg as shadowing_cfg
 from instinct_mj.assets.unitree_g1 import G1_29DOF_TORSOBASE_POPSICLE_CFG, beyondmimic_action_scale
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
     MotionReferenceMonitorTerm,
@@ -736,7 +737,7 @@ def g1_plane_shadowing_env_cfg(*, play: bool = False) -> shadowing_cfg.Shadowing
         actions=_actions_cfg(),
         observations=_observations_cfg(link_of_interests=list(active_motion_reference_cfg.link_of_interests)),
         commands=_commands_cfg(),
-        rewards={"rewards": deepcopy(shadowing_cfg.shadowing_rewards_terms())},
+        rewards=MultiRewardCfg({"rewards": deepcopy(shadowing_cfg.shadowing_rewards_terms())}),
         events=_events_cfg(),
         curriculum=_curriculum_cfg(),
         terminations=_terminations_cfg(),

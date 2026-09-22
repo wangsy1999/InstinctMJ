@@ -19,7 +19,7 @@ from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer.viewer_config import ViewerConfig
 
@@ -30,8 +30,7 @@ from instinct_mj.assets.unitree_g1 import (
     beyondmimic_action_scale,
     beyondmimic_g1_29dof_actuator_cfgs,
 )
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
-from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
 
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
 
@@ -48,7 +47,7 @@ class G1LocomotionSceneCfg(SceneCfg):
     def __post_init__(self) -> None:
         robot_cfg = copy.deepcopy(G1_CFG)
         robot_cfg.articulation.actuators = copy.deepcopy(beyondmimic_g1_29dof_actuator_cfgs)
-        feet_contact_forces = ForceThresholdContactSensorCfg(
+        feet_contact_forces = ContactSensorCfg(
             name="feet_contact_forces",
             primary=ContactMatch(
                 mode="body",
@@ -56,10 +55,9 @@ class G1LocomotionSceneCfg(SceneCfg):
                 entity="robot",
             ),
             secondary=None,
-            fields=("force",),
+            fields=("found", "force"),
             reduce="netforce",
             track_air_time=True,
-            force_threshold=1.0,
             history_length=3,
         )
         base_contact_forces = ContactSensorCfg(
@@ -368,12 +366,12 @@ def _curriculum_cfg() -> dict[str, CurrTerm]:
 
 
 @dataclass(kw_only=True)
-class G1LocomotionFlatEnvCfg(InstinctLabRLEnvCfg):
+class G1LocomotionFlatEnvCfg(InstinctRlEnvCfg):
     scene: G1LocomotionSceneCfg = field(default_factory=lambda: _scene_cfg(play=False))
     actions: dict = field(default_factory=_actions_cfg)
     commands: dict = field(default_factory=_commands_cfg)
     observations: dict = field(default_factory=_observations_cfg)
-    rewards: dict = field(default_factory=lambda: {"rewards": _rewards_cfg()})
+    rewards: dict = field(default_factory=_rewards_cfg)
     terminations: dict = field(default_factory=_terminations_cfg)
     events: dict = field(default_factory=_events_cfg)
     curriculum: dict = field(default_factory=_curriculum_cfg)
@@ -407,7 +405,7 @@ class G1LocomotionFlatEnvCfg(InstinctLabRLEnvCfg):
         self.sim.njmax = 300
         joint_pos_action: JointPositionActionCfg = self.actions["joint_pos"]
         joint_pos_action.scale = copy.deepcopy(beyondmimic_action_scale)
-        reward_terms = self.rewards["rewards"]
+        reward_terms = self.rewards
         feet_air_time = reward_terms.get("feet_air_time")
         stand_still = reward_terms.get("stand_still")
         action_rate_l2 = reward_terms.get("action_rate_l2")

@@ -364,9 +364,7 @@ def beyondmimic_bin_fail_counter_smoothing(
     curriculum_name: str,
 ):
     # Acquire the curriculum term instance, which should be a ManagerTermBase
-    curriculum: BeyondMimicAdaptiveWeighting = env.curriculum_manager._term_cfgs[
-        env.curriculum_manager._term_names.index(curriculum_name)
-    ].func
+    curriculum: BeyondMimicAdaptiveWeighting = env.curriculum_manager.get_term_cfg(curriculum_name).func
 
     if (
         getattr(curriculum, "enabled", True) is False
@@ -375,8 +373,8 @@ def beyondmimic_bin_fail_counter_smoothing(
     ):
         return
 
-    curriculum.motion_bin_fail_counter._concatenated_tensor.mul_(1 - curriculum.adaptive_alpha)
-    curriculum.motion_bin_fail_counter._concatenated_tensor.add_(
-        curriculum.adaptive_alpha * curriculum.current_motion_bin_fail_counter._concatenated_tensor
+    curriculum.motion_bin_fail_counter.concatenated_tensor.mul_(1 - curriculum.adaptive_alpha)
+    curriculum.motion_bin_fail_counter.concatenated_tensor.add_(
+        curriculum.adaptive_alpha * curriculum.current_motion_bin_fail_counter.concatenated_tensor
     )
-    curriculum.current_motion_bin_fail_counter._concatenated_tensor.fill_(0)
+    curriculum.current_motion_bin_fail_counter.concatenated_tensor.fill_(0)

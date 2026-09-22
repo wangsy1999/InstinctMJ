@@ -242,8 +242,10 @@ class PoseVelocityCommand(CommandTerm):
             )
             self.random_ang_vel_z *= torch.abs(self.random_ang_vel_z) > 0.5
 
-    def _update_command(self):
+    def _update_command(self, env_ids: torch.Tensor | None = None):
         """Re-target the position command to the current root state."""
+        # Pure function of the current state; refreshing all envs is safe.
+        del env_ids
         target_vec = self.pos_command_w - self.robot.data.root_link_pos_w[:, :3]
         target_dist = torch.norm(target_vec[:, :2], dim=1)
         self.pos_command_b[:] = quat_rotate_inverse(yaw_quat(self.robot.data.root_link_quat_w), target_vec)

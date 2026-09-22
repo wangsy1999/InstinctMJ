@@ -10,12 +10,13 @@ from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, SensorCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
     MotionReferenceMonitorTerm,
@@ -584,14 +585,14 @@ def make_beyondmimic_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class BeyondMimicEnvCfg(InstinctLabRLEnvCfg):
+class BeyondMimicEnvCfg(InstinctRlEnvCfg):
     """Configuration for the BeyondMimic environment."""
 
     scene: BeyondMimicSceneCfg = field(default_factory=lambda: BeyondMimicSceneCfg(num_envs=4096))
     commands: dict = field(default_factory=make_beyondmimic_commands)
     actions: dict = field(default_factory=make_beyondmimic_actions)
     observations: dict = field(default_factory=make_beyondmimic_observations)
-    rewards: dict = field(default_factory=lambda: {"rewards": make_beyondmimic_rewards()})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": make_beyondmimic_rewards()}))
     events: dict = field(default_factory=make_beyondmimic_events)
     curriculum: dict = field(default_factory=make_beyondmimic_curriculum)
     terminations: dict = field(default_factory=make_beyondmimic_terminations)

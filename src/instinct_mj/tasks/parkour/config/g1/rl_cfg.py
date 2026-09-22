@@ -1,3 +1,7 @@
+"""Instinct-RL configuration for the G1 parkour AMP task."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from instinct_mj.rl import (
@@ -90,3 +94,7 @@ class G1ParkourPPORunnerCfg(InstinctRlOnPolicyRunnerCfg):
     empirical_normalization: bool = False
     policy: object = field(default_factory=lambda: MoEPolicyCfg())
     algorithm: object = field(default_factory=lambda: AmpAlgoCfg())
+
+
+def g1_parkour_amp_instinct_rl_cfg() -> G1ParkourPPORunnerCfg:
+    return G1ParkourPPORunnerCfg()

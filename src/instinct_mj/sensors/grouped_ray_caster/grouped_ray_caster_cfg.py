@@ -37,4 +37,4 @@ class GroupedRayCasterCfg(RayCastSensorCfg):
     """Small forward offset (meters) used when continuing rays past disallowed hits."""
 
     def build(self) -> GroupedRayCaster:
-        return GroupedRayCaster(self)
+        return self.class_type(self)

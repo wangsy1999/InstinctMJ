@@ -15,13 +15,16 @@ from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, SensorCfg
-from mjlab.terrains import TerrainEntityCfg, TerrainGeneratorCfg
+from mjlab.terrains import TerrainGeneratorCfg
+
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
 import instinct_mj.tasks.shadowing.mdp as shadowing_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     BodyStatMonitorTerm,
     JointStatMonitorTerm,
@@ -36,7 +39,6 @@ from instinct_mj.monitors import (
     ShadowingVelocityMonitorTerm,
     TorqueMonitorSensorCfg,
 )
-from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.terrains.height_field import PerlinPlaneTerrainCfg
 
 
@@ -119,15 +121,14 @@ class ShadowingSceneCfg(SceneCfg):
 
     sensors: tuple[SensorCfg, ...] = field(
         default_factory=lambda: (
-            ForceThresholdContactSensorCfg(
+            ContactSensorCfg(
                 name="contact_forces",
                 primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
                 secondary=None,
-                fields=("force",),
+                fields=("found", "force"),
                 reduce="netforce",
                 history_length=3,
                 track_air_time=True,
-                force_threshold=1.0,
             ),
             ContactSensorCfg(
                 name="undesired_contact_forces",
@@ -645,14 +646,14 @@ def make_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class ShadowingEnvCfg(InstinctLabRLEnvCfg):
+class ShadowingEnvCfg(InstinctRlEnvCfg):
     """Configuration for the shadowing environment."""
 
     scene: ShadowingSceneCfg = field(default_factory=lambda: ShadowingSceneCfg(num_envs=4096))
     commands: dict = field(default_factory=make_commands)
     actions: dict = field(default_factory=make_actions)
     observations: dict = field(default_factory=make_observations)
-    rewards: dict = field(default_factory=lambda: {"rewards": shadowing_rewards_terms()})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": shadowing_rewards_terms()}))
     events: dict = field(default_factory=make_events)
     curriculum: dict = field(default_factory=make_curriculum)
     terminations: dict = field(default_factory=make_terminations)

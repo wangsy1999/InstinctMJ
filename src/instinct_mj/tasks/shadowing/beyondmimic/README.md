@@ -14,10 +14,7 @@ beyondmimic/
 │   └── g1/                       # G1 robot configurations
 │       ├── __init__.py
 │       ├── beyondmimic_plane_cfg.py  # G1 plane environment config
-│       ├── rl_cfgs.py            # Instinct-RL runner wiring
-│       └── agents/               # Agent configurations
-│           ├── __init__.py
-│           └── beyondmimic_ppo_cfg.py  # PPO agent config
+│       └── rl_cfg.py             # Instinct-RL runner configuration
 ```
 
 ## Key Features
@@ -76,7 +73,7 @@ To visualize an untrained policy, use `--agent random`.
 
 ```python
 from instinct_mj.tasks.shadowing.beyondmimic.config.g1.beyondmimic_plane_cfg import g1_beyondmimic_plane_env_cfg
-from instinct_mj.tasks.shadowing.beyondmimic.config.g1.rl_cfgs import g1_beyondmimic_instinct_rl_cfg
+from instinct_mj.tasks.shadowing.beyondmimic.config.g1.rl_cfg import g1_beyondmimic_instinct_rl_cfg
 
 # Create environment configuration
 env_cfg = g1_beyondmimic_plane_env_cfg(play=False)

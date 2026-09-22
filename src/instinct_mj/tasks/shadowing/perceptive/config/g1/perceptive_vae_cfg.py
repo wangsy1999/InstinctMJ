@@ -35,6 +35,7 @@ from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceMan
 from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
 
 G1_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG
+PROPRIO_HISTORY_LENGTH = 8
 
 # NOTE: Change this to your local perceptive VAE dataset folder.
 # The folder should contain the motion files and a `metadata.yaml`.
@@ -136,13 +137,13 @@ def make_vae_observations() -> dict[str, ObsGroupCfg]:
         "projected_gravity": ObsTermCfg(
             func=mdp.projected_gravity,
             noise=UniformNoiseCfg(n_min=-0.05, n_max=0.05),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         # base_lin_vel = ObsTermCfg(func=mdp.base_lin_vel)
         "base_ang_vel": ObsTermCfg(
             func=mdp.base_ang_vel,
             noise=UniformNoiseCfg(n_min=-0.2, n_max=0.2),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_pos": ObsTermCfg(
             func=mdp.joint_pos_rel,
@@ -150,7 +151,7 @@ def make_vae_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.01, n_max=0.01),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_vel": ObsTermCfg(
             func=mdp.joint_vel_rel,
@@ -158,9 +159,9 @@ def make_vae_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.5, n_max=0.5),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
-        "last_action": ObsTermCfg(func=mdp.last_action, history_length=8),
+        "last_action": ObsTermCfg(func=mdp.last_action, history_length=PROPRIO_HISTORY_LENGTH),
     }
 
     # Critic observations

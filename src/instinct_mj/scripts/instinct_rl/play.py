@@ -14,23 +14,26 @@ import mjlab
 import torch
 import tyro
 from instinct_rl.runners import OnPolicyRunner
-from mjlab.tasks.tracking.mdp import MotionCommandCfg
+from mjlab.scripts._cli import maybe_print_top_level_help
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 
 import instinct_mj.tasks  # noqa: F401
-from instinct_mj.envs import InstinctRlEnv
 from instinct_mj.rl import InstinctRlVecEnvWrapper
-from instinct_mj.tasks.registry import list_tasks, load_env_cfg, load_instinct_rl_cfg, load_runner_cls
-from instinct_mj.utils.motion_validation import validate_tracking_motion_file
+from instinct_mj.tasks.registry import (
+    list_tasks,
+    load_env_cfg,
+    load_env_cls,
+    load_instinct_rl_cfg,
+    load_runner_cls,
+    load_vecenv_cls,
+)
 
 
 @dataclass(frozen=True)
 class PlayConfig:
     agent: Literal["zero", "random", "trained"] = "trained"
-    motion_file: str | None = None
-    registry_name: str | None = None
     checkpoint_file: str | None = None
     load_run: str | None = None
     checkpoint_pattern: str | None = None
@@ -166,45 +169,6 @@ def _patch_world_free_camera(viewer: NativeMujocoViewer) -> None:
             viewer._set_camera_world()
 
     viewer._setup_camera = _wrapped_setup_camera
-
-
-def _resolve_tracking_motion(_task_id: str, cfg: PlayConfig, env_cfg) -> None:
-    is_tracking_task = "motion" in env_cfg.commands and isinstance(env_cfg.commands["motion"], MotionCommandCfg)
-    if not is_tracking_task:
-        return
-
-    motion_cmd = env_cfg.commands["motion"]
-    assert isinstance(motion_cmd, MotionCommandCfg)
-
-    if cfg.motion_file is not None:
-        motion_path = Path(cfg.motion_file).expanduser().resolve()
-        validate_tracking_motion_file(motion_path)
-        motion_cmd.motion_file = str(motion_path)
-        return
-
-    if cfg.registry_name:
-        registry_name = cfg.registry_name
-        if ":" not in registry_name:
-            registry_name = registry_name + ":latest"
-        import wandb
-
-        api = wandb.Api()
-        artifact = api.artifact(registry_name)
-        motion_path = (Path(artifact.download()) / "motion.npz").resolve()
-        validate_tracking_motion_file(motion_path)
-        motion_cmd.motion_file = str(motion_path)
-        return
-
-    configured_motion = str(getattr(motion_cmd, "motion_file", "")).strip()
-    if configured_motion:
-        configured_path = Path(configured_motion).expanduser().resolve()
-        validate_tracking_motion_file(configured_path)
-        motion_cmd.motion_file = str(configured_path)
-        print(f"[INFO] Using motion file from env config: {configured_path}")
-        return
-
-    raise ValueError("Tracking play requires a motion file.\n  --motion-file /path/to/motion.npz")
-
 
 def _build_dummy_policy(agent_mode: str, action_shape: tuple[int, ...], device: str):
     if agent_mode == "zero":
@@ -412,7 +376,8 @@ def _run_headless_rollout(
 
 
 def run_play(task_id: str, cfg: PlayConfig) -> None:
-    if InstinctRlVecEnvWrapper is None:
+    vecenv_cls = load_vecenv_cls(task_id)
+    if vecenv_cls is None:
         raise ImportError(
             "InstinctRlVecEnvWrapper is unavailable. Please install runtime deps:\n"
             '  pip install -e "git+https://github.com/mujocolab/mjlab.git#egg=mjlab"\n'
@@ -445,7 +410,6 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
         env_cfg.terminations = {}
         print("[INFO] All terminations are disabled for play.")
 
-    _resolve_tracking_motion(task_id, cfg, env_cfg)
     if cfg.use_onnx and "Parkour" not in task_id:
         raise ValueError("`--use-onnx` currently only supports parkour tasks.")
     if cfg.use_onnx and cfg.agent != "trained":
@@ -463,7 +427,8 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
     elif cfg.export_onnx:
         raise ValueError("`--export-onnx` only supports `--agent trained`.")
 
-    env = InstinctRlEnv(
+    env_cls = load_env_cls(task_id)
+    env = env_cls(
         cfg=env_cfg,
         device=device,
         render_mode="rgb_array" if cfg.video else None,
@@ -485,7 +450,7 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
         )
         print(f"[INFO] Recording play video to: {video_dir}")
 
-    vec_env = InstinctRlVecEnvWrapper(
+    vec_env = vecenv_cls(
         env,
         policy_group=agent_cfg.policy_observation_group,
         critic_group=agent_cfg.critic_observation_group,
@@ -572,6 +537,8 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
 
 
 def main() -> None:
+    maybe_print_top_level_help("instinct-play")
+
     all_tasks = list_tasks()
     chosen_task, remaining_args = tyro.cli(
         tyro.extras.literal_type_from_choices(all_tasks),

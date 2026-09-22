@@ -1,4 +1,5 @@
 from .height_field import *
+from .terrain_entity_cfg import TerrainEntityCfg
 from .terrain_importer import TerrainImporter
 from .terrain_importer_cfg import TerrainImporterCfg
 from .trimesh import *

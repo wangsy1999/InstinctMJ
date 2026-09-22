@@ -52,15 +52,15 @@ def terrain_out_of_bounds(
     If the actor moves too close to the edge of the terrain, the termination is activated. The distance
     to the edge of the terrain is calculated based on the size of the terrain and the distance buffer.
     """
-    # In mjlab, Scene stores config in _cfg.
-    terrain_type = env.scene._cfg.terrain.terrain_type
+    terrain_cfg = env.scene.terrain.cfg
+    terrain_type = terrain_cfg.terrain_type
     if terrain_type == "plane":
         return torch.zeros(
             (env.num_envs,), device=env.device, dtype=torch.bool
         )  # we have infinite terrain because it is a plane
     elif terrain_type in ("generator", "hacked_generator"):
         # obtain the size of the sub-terrains
-        terrain_gen_cfg = env.scene.terrain.cfg.terrain_generator
+        terrain_gen_cfg = terrain_cfg.terrain_generator
         grid_width, grid_length = terrain_gen_cfg.size
         n_rows, n_cols = terrain_gen_cfg.num_rows, terrain_gen_cfg.num_cols
         border_width = terrain_gen_cfg.border_width

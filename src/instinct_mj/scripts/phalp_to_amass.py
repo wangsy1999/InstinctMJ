@@ -6,21 +6,37 @@ output into standard AMASS npz format for downstream retargeting.
 
 from __future__ import annotations
 
-import os
+from dataclasses import dataclass
 
 import joblib
+import mjlab
 import numpy as np
 import quaternion as npq
 import tqdm
+import tyro
 
 CAM_ROT = npq.from_euler_angles([0.0, -np.pi / 2, 0.0]) * npq.from_euler_angles([np.pi / 2, 0.0, 0.0])
 # CAM_ROT = npq.from_euler_angles([0., -np.pi/6, 0.]) * CAM_ROT # Add pitch if you see the video camera is not horizontal
 CAM_POS = np.array([0, 0, 0.4])
 
 
-def main(args):
+@dataclass(frozen=True)
+class PhalpToAmassConfig:
+    """Configuration for converting PHALP tracking data to AMASS format."""
+
+    input: str
+    """Input PHALP motion tracking data file."""
+    output: str
+    """Output AMASS format pose file."""
+    focal_x: float = 0.4
+    """Normalized focal length of the camera in the x-axis."""
+    fps: int = 25
+    """Frame rate written to the output because human-mesh-reconstruction does not provide it."""
+
+
+def main(cfg: PhalpToAmassConfig) -> None:
     """Transforming PHALP motion tracking data to AMASS format pose file"""
-    results = joblib.load(args.input)
+    results = joblib.load(cfg.input)
 
     num_frames = len(results.keys())
     poses = np.zeros(
@@ -47,7 +63,7 @@ def main(args):
             break
 
         img_H, img_W = frame["size"][0]
-        fx = args.focal_x
+        fx = cfg.focal_x
         fy = fx * img_H / img_W
 
         # root pose in camera frame
@@ -85,12 +101,12 @@ def main(args):
             )
         )
 
-    # plt.plot(np.arange(num_frames) * 1/args.fps, trans[:, 0], label="x")
-    # plt.plot(np.arange(num_frames) * 1/args.fps, trans[:, 1], label="y")
-    # plt.plot(np.arange(num_frames) * 1/args.fps, trans[:, 2], label="z")
-    # plt.plot(np.arange(num_frames) * 1/args.fps, poses[:, 0, 0], label="x")
-    # plt.plot(np.arange(num_frames) * 1/args.fps, poses[:, 0, 1], label="y")
-    # plt.plot(np.arange(num_frames) * 1/args.fps, poses[:, 0, 2], label="z")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, trans[:, 0], label="x")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, trans[:, 1], label="y")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, trans[:, 2], label="z")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, poses[:, 0, 0], label="x")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, poses[:, 0, 1], label="y")
+    # plt.plot(np.arange(num_frames) * 1/cfg.fps, poses[:, 0, 2], label="z")
     # plt.legend()
     # plt.show()
 
@@ -98,31 +114,14 @@ def main(args):
     data = {
         "poses": poses,
         "trans": trans,
-        "mocap_framerate": args.fps,
+        "mocap_framerate": cfg.fps,
     }
-    np.savez(args.output, **data)  # type: ignore
+    np.savez(cfg.output, **data)  # type: ignore
 
 
 def entry_point() -> None:
     """CLI entry point for ``instinct-phalp-to-amass``."""
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Input PHALP motion tracking data file")
-    parser.add_argument("--output", type=str, help="Output AMASS format pose file")
-    parser.add_argument("--focal_x", type=float, default=0.4, help="Normalized focal length of the camera in x-axis")
-    parser.add_argument(
-        "--fps",
-        type=int,
-        default=25,
-        help=(
-            "Frame rate of the motion tracking data, write directly to the file because human-mesh-reconstruction"
-            " system does not know this info"
-        ),
-    )
-
-    args = parser.parse_args()
-    main(args)
+    main(tyro.cli(PhalpToAmassConfig, config=mjlab.TYRO_FLAGS))
 
 
 if __name__ == "__main__":

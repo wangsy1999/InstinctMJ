@@ -55,7 +55,8 @@ Prerequisites:
 
 - Python `3.10` to `3.13` (`requires-python = ">=3.10,<3.14"`).
 - Linux x86_64 or macOS arm64.
-- `mjlab` must be next to this directory as `../mjlab`, because `pyproject.toml` installs it editable from that path.
+- `mjlab 1.6.0` must be next to this directory as `../mjlab`, because `pyproject.toml` installs it editable from that path.
+- `instinct_rl 1.0.2` is installed from commit `3a2844890387eda6d93a4465cdef9e767aba8546`, as recorded in `uv.lock`.
 
 After installation, run training and playback with the `instinct_rl`-style commands:
 
@@ -189,12 +190,6 @@ Run all checks:
 pre-commit run --all-files
 ```
 
-Or use the local helper command:
-
-```bash
-uv run instinct-format
-```
-
 To enable hooks on every commit:
 
 ```bash
@@ -218,7 +213,7 @@ Example registration pattern:
 from instinct_mj.tasks.registry import register_instinct_task
 
 from .my_env_cfg import MyEnvCfg, MyEnvCfg_PLAY
-from .rl_cfgs import my_instinct_rl_cfg
+from .rl_cfg import my_instinct_rl_cfg
 
 register_instinct_task(
     task_id="Instinct-My-Task-v0",

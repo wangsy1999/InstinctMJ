@@ -167,6 +167,11 @@ class FiledTerrainGenerator(TerrainGenerator):
         self._normalize_patch_radii_for_mjlab_core(runtime_cfg)
         super().__init__(runtime_cfg, device)
 
+    def release_terrain_mesh_cache(self) -> None:
+        """Release terrain meshes retained for virtual-obstacle generation."""
+        self.terrain_mesh = None
+        self._terrain_meshes.clear()
+
     def _cache_original_patch_radii(self, cfg: FiledTerrainGeneratorCfg) -> None:
         """Cache original patch-radius config per subterrain for mesh sampling."""
         self._original_patch_radii_by_cfg_id.clear()

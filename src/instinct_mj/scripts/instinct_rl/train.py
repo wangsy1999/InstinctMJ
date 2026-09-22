@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import signal
 import sys
 import tempfile
-from dataclasses import dataclass, fields, is_dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,7 +19,7 @@ import tyro
 import warp as wp
 from instinct_rl.runners import OnPolicyRunner
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.tasks.tracking.mdp import MotionCommandCfg
+from mjlab.scripts._cli import maybe_print_top_level_help
 from mjlab.utils.gpu import select_gpus
 from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
@@ -29,36 +27,22 @@ from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer
 
 import instinct_mj.tasks  # noqa: F401
-from instinct_mj.envs import InstinctRlEnv
-from instinct_mj.rl import InstinctRlOnPolicyRunnerCfg, InstinctRlVecEnvWrapper
-from instinct_mj.tasks.registry import list_tasks, load_env_cfg, load_instinct_rl_cfg, load_runner_cls
-from instinct_mj.utils.motion_validation import validate_tracking_motion_file
-
-
-def _to_yaml_data(data: Any) -> Any:
-    if isinstance(data, Enum):
-        return _to_yaml_data(data.value)
-    if is_dataclass(data):
-        return {item.name: _to_yaml_data(getattr(data, item.name)) for item in fields(data)}
-    if isinstance(data, dict):
-        return {str(key): _to_yaml_data(value) for key, value in data.items()}
-    if isinstance(data, tuple):
-        return [_to_yaml_data(value) for value in data]
-    if isinstance(data, list):
-        return [_to_yaml_data(value) for value in data]
-    if callable(data):
-        return f"{data.__module__}:{data.__qualname__}"
-    if isinstance(data, (str, int, float, bool)) or data is None:
-        return data
-    return repr(data)
+from instinct_mj.rl import InstinctRlOnPolicyRunnerCfg
+from instinct_mj.tasks.registry import (
+    list_tasks,
+    load_env_cfg,
+    load_env_cls,
+    load_instinct_rl_cfg,
+    load_runner_cls,
+    load_vecenv_cls,
+)
+from instinct_mj.utils.dict import class_to_dict
 
 
 @dataclass(frozen=True)
 class TrainConfig:
     env: ManagerBasedRlEnvCfg
     agent: InstinctRlOnPolicyRunnerCfg
-    motion_file: str | None = None
-    registry_name: str | None = None
     num_envs: int | None = None
     device: str | None = None
     video: bool = False
@@ -76,164 +60,6 @@ class TrainConfig:
             env=load_env_cfg(task_id, play=use_play_cfg),
             agent=load_instinct_rl_cfg(task_id),
         )
-
-
-@dataclass
-class TrainCliConfig:
-    motion_file: str | None = None
-    registry_name: str | None = None
-    num_envs: int | None = None
-    device: str | None = None
-    video: bool = False
-    video_length: int = 200
-    video_interval: int = 2_000
-    viewer: Literal["none", "native"] = "none"
-    viewer_fps: float = 60.0
-    gpu_ids: list[int] | Literal["all"] | None = None
-    torchrunx_log_dir: str | None = None
-
-
-def _parse_cli_literal(raw: str) -> Any:
-    lower = raw.lower()
-    if lower == "none":
-        return None
-    if lower == "true":
-        return True
-    if lower == "false":
-        return False
-    if re.fullmatch(r"[+-]?\d+", raw):
-        return int(raw)
-    if re.fullmatch(r"[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?", raw):
-        return float(raw)
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
-        return raw[1:-1]
-    if raw.startswith("[") and raw.endswith("]"):
-        inner = raw[1:-1].strip()
-        if not inner:
-            return []
-        return [_parse_cli_literal(item.strip()) for item in inner.split(",") if item.strip()]
-    if raw.startswith("(") and raw.endswith(")"):
-        inner = raw[1:-1].strip()
-        if not inner:
-            return ()
-        return tuple(_parse_cli_literal(item.strip()) for item in inner.split(",") if item.strip())
-    return raw
-
-
-def _iter_dot_overrides(tokens: list[str]) -> list[tuple[str, Any]]:
-    overrides: list[tuple[str, Any]] = []
-    i = 0
-    while i < len(tokens):
-        token = tokens[i]
-        if not token.startswith("--"):
-            raise ValueError(f"Unexpected argument '{token}'. Dot-overrides must start with '--'.")
-
-        flag = token[2:]
-        if "=" in flag:
-            key, raw_value = flag.split("=", 1)
-            overrides.append((key, _parse_cli_literal(raw_value)))
-            i += 1
-            continue
-
-        if i + 1 >= len(tokens) or tokens[i + 1].startswith("--"):
-            overrides.append((flag, True))
-            i += 1
-            continue
-
-        overrides.append((flag, _parse_cli_literal(tokens[i + 1])))
-        i += 2
-    return overrides
-
-
-def _coerce_override_value(value: Any, current: Any) -> Any:
-    if isinstance(current, tuple) and isinstance(value, list):
-        return tuple(value)
-    if isinstance(current, list) and isinstance(value, tuple):
-        return list(value)
-    if isinstance(current, float) and isinstance(value, int):
-        return float(value)
-    return value
-
-
-def _set_nested_attr(target: Any, path: str, value: Any) -> None:
-    parts = path.split(".")
-    current = target
-    for part in parts[:-1]:
-        if isinstance(current, dict):
-            if part not in current:
-                raise ValueError(f"Unknown dict key '{part}' while applying override '{path}'.")
-            current = current[part]
-        else:
-            if is_dataclass(current):
-                if part not in current.__dataclass_fields__:
-                    raise ValueError(f"Unknown attribute '{part}' while applying override '{path}'.")
-            elif part not in vars(current):
-                raise ValueError(f"Unknown attribute '{part}' while applying override '{path}'.")
-            current = getattr(current, part)
-
-    last = parts[-1]
-    if isinstance(current, dict):
-        if last not in current:
-            raise ValueError(f"Unknown dict key '{last}' while applying override '{path}'.")
-        current[last] = _coerce_override_value(value, current[last])
-        return
-
-    if is_dataclass(current):
-        if last not in current.__dataclass_fields__:
-            raise ValueError(f"Unknown attribute '{last}' while applying override '{path}'.")
-    elif last not in vars(current):
-        raise ValueError(f"Unknown attribute '{last}' while applying override '{path}'.")
-    existing = getattr(current, last)
-    setattr(current, last, _coerce_override_value(value, existing))
-
-
-def _apply_dot_overrides(cfg: TrainConfig, raw_args: list[str]) -> None:
-    for key, value in _iter_dot_overrides(raw_args):
-        if key.startswith("agent."):
-            _set_nested_attr(cfg.agent, key[len("agent.") :], value)
-        elif key.startswith("env."):
-            _set_nested_attr(cfg.env, key[len("env.") :], value)
-        else:
-            raise ValueError(f"Unsupported override '{key}'. Use top-level flags or '--agent.*' / '--env.*'.")
-
-
-def _resolve_tracking_motion(_task_id: str, cfg: TrainConfig) -> str | None:
-    is_tracking_task = "motion" in cfg.env.commands and isinstance(cfg.env.commands["motion"], MotionCommandCfg)
-    if not is_tracking_task:
-        return None
-
-    motion_cmd = cfg.env.commands["motion"]
-    assert isinstance(motion_cmd, MotionCommandCfg)
-
-    if cfg.motion_file is not None:
-        motion_path = Path(cfg.motion_file).expanduser().resolve()
-        validate_tracking_motion_file(motion_path)
-        motion_cmd.motion_file = str(motion_path)
-        return None
-
-    if cfg.registry_name:
-        registry_name = cfg.registry_name
-        if ":" not in registry_name:
-            registry_name = registry_name + ":latest"
-        import wandb
-
-        api = wandb.Api()
-        artifact = api.artifact(registry_name)
-        motion_path = (Path(artifact.download()) / "motion.npz").resolve()
-        validate_tracking_motion_file(motion_path)
-        motion_cmd.motion_file = str(motion_path)
-        return registry_name
-
-    configured_motion = str(getattr(motion_cmd, "motion_file", "")).strip()
-    if configured_motion:
-        configured_path = Path(configured_motion).expanduser().resolve()
-        validate_tracking_motion_file(configured_path)
-        motion_cmd.motion_file = str(configured_path)
-        print(f"[INFO] Using motion file from env config: {configured_path}")
-        return None
-
-    raise ValueError("Tracking training requires a motion file.\n  --motion-file /path/to/motion.npz")
-
 
 def _resolve_device(cfg: TrainConfig) -> str:
     if cfg.device is not None:
@@ -285,7 +111,8 @@ def _resolve_distributed_runtime(
 def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     log_dir = log_dir.expanduser().resolve()
 
-    if InstinctRlVecEnvWrapper is None:
+    vecenv_cls = load_vecenv_cls(task_id)
+    if vecenv_cls is None:
         raise ImportError(
             "InstinctRlVecEnvWrapper is unavailable. Please install runtime deps:\n"
             '  pip install -e "git+https://github.com/mujocolab/mjlab.git#egg=mjlab"\n'
@@ -347,8 +174,6 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     if cfg.num_envs is not None:
         cfg.env.scene.num_envs = cfg.num_envs
 
-    registry_name = _resolve_tracking_motion(task_id, cfg)
-
     print(
         f"[INFO] Task={task_id}, device={device}, seed={seed}, "
         f"num_envs={cfg.env.scene.num_envs}, rank={rank}/{world_size}"
@@ -356,7 +181,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     if rank == 0:
         print(f"[INFO] Logging to: {log_dir}")
 
-    env = InstinctRlEnv(
+    env_cls = load_env_cls(task_id)
+    env = env_cls(
         cfg=cfg.env,
         device=device,
         render_mode="rgb_array" if video_enabled else None,
@@ -372,7 +198,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
         )
         print("[INFO] Recording videos during training.")
 
-    vec_env = InstinctRlVecEnvWrapper(
+    vec_env = vecenv_cls(
         env,
         policy_group=cfg.agent.policy_observation_group,
         critic_group=cfg.agent.critic_observation_group,
@@ -427,13 +253,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
         runner.load(str(resume_path))
 
     if rank == 0:
-        dump_yaml(log_dir / "params" / "env.yaml", _to_yaml_data(cfg.env))
-        dump_yaml(log_dir / "params" / "agent.yaml", _to_yaml_data(cfg.agent))
-        if registry_name is not None:
-            dump_yaml(
-                log_dir / "params" / "registry.yaml",
-                {"registry_name": registry_name},
-            )
+        dump_yaml(log_dir / "params" / "env.yaml", class_to_dict(cfg.env))
+        dump_yaml(log_dir / "params" / "agent.yaml", class_to_dict(cfg.agent))
     if train_viewer is not None:
         runner_rollout_step = runner.rollout_step
 
@@ -524,6 +345,8 @@ def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
 
 
 def main() -> None:
+    maybe_print_top_level_help("instinct-train")
+
     all_tasks = list_tasks()
     chosen_task, remaining_args = tyro.cli(
         tyro.extras.literal_type_from_choices(all_tasks),
@@ -532,30 +355,14 @@ def main() -> None:
         config=mjlab.TYRO_FLAGS,
     )
 
-    cli_cfg, dot_override_args = tyro.cli(
-        TrainCliConfig,
+    args = tyro.cli(
+        TrainConfig,
         args=remaining_args,
-        default=TrainCliConfig(),
-        return_unknown_args=True,
+        default=TrainConfig.from_task(chosen_task),
         prog=sys.argv[0] + f" {chosen_task}",
         config=mjlab.TYRO_FLAGS,
     )
-
-    args = replace(
-        TrainConfig.from_task(chosen_task),
-        motion_file=cli_cfg.motion_file,
-        registry_name=cli_cfg.registry_name,
-        num_envs=cli_cfg.num_envs,
-        device=cli_cfg.device,
-        video=cli_cfg.video,
-        video_length=cli_cfg.video_length,
-        video_interval=cli_cfg.video_interval,
-        viewer=cli_cfg.viewer,
-        viewer_fps=cli_cfg.viewer_fps,
-        gpu_ids=cli_cfg.gpu_ids,
-        torchrunx_log_dir=cli_cfg.torchrunx_log_dir,
-    )
-    _apply_dot_overrides(args, dot_override_args)
+    del remaining_args
     launch_training(task_id=chosen_task, args=args)
 
 

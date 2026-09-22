@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import copy
 import hashlib
 import os
 import uuid
@@ -30,11 +31,9 @@ _HFIELD_RAYCAST_EXECUTORS: dict[int, ProcessPoolExecutor] = {}
 
 import mujoco
 from mjlab.terrains.terrain_generator import TerrainGeometry, TerrainOutput
+from mjlab.terrains.utils import make_plane
 
-from instinct_mj.terrains.height_field.utils import convert_height_field_to_mesh
-
-from ..height_field.hf_terrains import generate_perlin_noise
-from .utils import crop_terrain_mesh_aabb, generate_wall
+from .utils import crop_terrain_mesh_aabb
 
 if TYPE_CHECKING:
     from . import mesh_terrains_cfg
@@ -1657,103 +1656,13 @@ def motion_matched_terrain(
     return TerrainOutput(origin=origin, geometries=geometries)
 
 
-@generate_wall
-def floating_box_terrain(difficulty: float, cfg: object) -> tuple[list[trimesh.Trimesh], np.ndarray]:
-    """Generates a floating box terrain."""
-
-    # resolve the terrain configuration
-    # height of the floating box above the ground
-    if isinstance(cfg.floating_height, (tuple, list)):
-        floating_height = cfg.floating_height[1] - difficulty * (cfg.floating_height[1] - cfg.floating_height[0])
-    else:
-        floating_height = cfg.floating_height
-
-    # length of the floating box
-    if isinstance(cfg.box_length, (tuple, list)):
-        box_length = cfg.box_length[1] - difficulty * (cfg.box_length[1] - cfg.box_length[0])
-    else:
-        box_length = cfg.box_length
-
-    # height of the floating box
-    if isinstance(cfg.box_height, (tuple, list)):
-        box_height = np.random.uniform(*cfg.box_height)
-    else:
-        box_height = cfg.box_height
-
-    # width of the floating box
-    if cfg.box_width is None:
-        box_width = cfg.size[0]
-    else:
-        box_width = cfg.box_width
-
-    # initialize the list of meshes
-    meshes_list = list()
-
-    # extract quantities
-    total_height = floating_height + box_height
-    # constants for terrain generation
-    terrain_height = 0.0
-
-    # generate the box mesh
-    dim = (box_width, box_length, box_height)
-    pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], floating_height + box_height / 2)
-    box_mesh = trimesh.creation.box(dim, trimesh.transformations.translation_matrix(pos))
-    meshes_list.append(box_mesh)
-
-    # generate the ground
-
-    if cfg.perlin_cfg is None:
-        dim = (cfg.size[0], cfg.size[1], terrain_height)
-        pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], -terrain_height / 2)
-        ground_mesh = trimesh.creation.box(dim, trimesh.transformations.translation_matrix(pos))
-        meshes_list.append(ground_mesh)
-    else:
-        clean_ground_height_field = np.zeros(
-            (int(cfg.size[0] / cfg.horizontal_scale) + 1, int(cfg.size[1] / cfg.horizontal_scale) + 1), dtype=np.int16
-        )
-        perlin_cfg = cfg.perlin_cfg
-        perlin_cfg.size = cfg.size
-        perlin_cfg.horizontal_scale = cfg.horizontal_scale
-        perlin_cfg.vertical_scale = cfg.vertical_scale
-        perlin_cfg.slope_threshold = cfg.slope_threshold
-        perlin_noise = generate_perlin_noise(
-            difficulty,
-            perlin_cfg,  # type: ignore[arg-type]
-        )
-        h, w = perlin_noise.shape
-        ground_h, ground_w = clean_ground_height_field.shape
-        pad_h_left = max(0, (ground_h - h) // 2)
-        pad_h_right = max(0, ground_h - h - pad_h_left)
-        pad_w_left = max(0, (ground_w - w) // 2)
-        pad_w_right = max(0, ground_w - w - pad_w_left)
-        pad_width = ((pad_h_left, pad_h_right), (pad_w_left, pad_w_right))
-        perlin_noise = np.pad(perlin_noise, pad_width, mode="constant", constant_values=0)
-        if cfg.no_perlin_at_obstacle is True:
-            box_width_px = int(box_width / cfg.horizontal_scale)
-            box_length_px = int(box_length / cfg.horizontal_scale)
-            box_width_start_px = int((cfg.size[0] - box_width) / 2 / cfg.horizontal_scale)
-            box_length_start_px = int((cfg.size[1] - box_length) / 2 / cfg.horizontal_scale)
-            perlin_noise[
-                box_width_start_px : box_width_start_px + box_width_px,
-                box_length_start_px : box_length_start_px + box_length_px,
-            ] = 0
-        ground_height_field = clean_ground_height_field + perlin_noise
-        # convert to trimesh
-        vertices, triangles = convert_height_field_to_mesh(
-            ground_height_field, cfg.horizontal_scale, cfg.vertical_scale, cfg.slope_threshold
-        )
-        ground_mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
-        meshes_list.append(ground_mesh)
-
-    # specify the origin of the terrain
-    origin = np.array([pos[0], pos[1], total_height])
-
-    return meshes_list, origin
-
-
-@generate_wall
-def random_multi_box_terrain(difficulty: float, cfg: object) -> tuple[list[trimesh.Trimesh], np.ndarray]:
-    """Generates a terrain containing multiple boxes with random size and orientation."""
+def random_multi_box_terrain(
+    cfg: mesh_terrains_cfg.PerlinMeshRandomMultiBoxTerrainCfg,
+    difficulty: float,
+    spec: mujoco.MjSpec,
+    rng: np.random.Generator,
+) -> TerrainOutput:
+    """Generate randomly sized and oriented box obstacles with mjlab-native MuJoCo geoms."""
 
     box_height_range = cfg.box_height_range
     box_length_range = cfg.box_length_range
@@ -1762,7 +1671,9 @@ def random_multi_box_terrain(difficulty: float, cfg: object) -> tuple[list[trime
     if isinstance(cfg.box_height_mean, (tuple, list)):
         if cfg.box_height_mean[0] < box_height_range:
             raise RuntimeError("The minimum box height mean is smaller than the box height half range.")
-        box_height_mean = cfg.box_height_mean[0] + difficulty * (cfg.box_height_mean[1] - cfg.box_height_mean[0])
+        box_height_mean = cfg.box_height_mean[0] + difficulty * (
+            cfg.box_height_mean[1] - cfg.box_height_mean[0]
+        )
     else:
         box_height_mean = cfg.box_height_mean
         if box_height_mean < box_height_range:
@@ -1771,7 +1682,9 @@ def random_multi_box_terrain(difficulty: float, cfg: object) -> tuple[list[trime
     if isinstance(cfg.box_length_mean, (tuple, list)):
         if cfg.box_length_mean[0] < box_length_range:
             raise RuntimeError("The minimum box length mean is smaller than the box length half range.")
-        box_length_mean = cfg.box_length_mean[0] + difficulty * (cfg.box_length_mean[1] - cfg.box_length_mean[0])
+        box_length_mean = cfg.box_length_mean[0] + difficulty * (
+            cfg.box_length_mean[1] - cfg.box_length_mean[0]
+        )
     else:
         box_length_mean = cfg.box_length_mean
         if box_length_mean < box_length_range:
@@ -1780,117 +1693,173 @@ def random_multi_box_terrain(difficulty: float, cfg: object) -> tuple[list[trime
     if isinstance(cfg.box_width_mean, (tuple, list)):
         if cfg.box_width_mean[0] < box_width_range:
             raise RuntimeError("The minimum box width mean is smaller than the box width half range.")
-        box_width_mean = cfg.box_width_mean[0] + difficulty * (cfg.box_width_mean[1] - cfg.box_width_mean[0])
+        box_width_mean = cfg.box_width_mean[0] + difficulty * (
+            cfg.box_width_mean[1] - cfg.box_width_mean[0]
+        )
     else:
         box_width_mean = cfg.box_width_mean
         if box_width_mean < box_width_range:
             raise RuntimeError("The minimum box width mean is smaller than the box width half range.")
 
-    generation_ratio = cfg.generation_ratio
+    width, length = cfg.size
+    num_boxes = max(1, int(cfg.generation_ratio * width * length / (box_length_mean * box_width_mean)))
+    body = spec.body("terrain")
+    geometries: list[TerrainGeometry] = []
+    surface_meshes: list[trimesh.Trimesh] = []
 
-    width = cfg.size[0]
-    length = cfg.size[1]
-
-    mesh_list = []
-
-    num_boxes = int(generation_ratio * (width * length) / (box_length_mean * box_width_mean))
-    num_boxes = max(1, num_boxes)
     if cfg.perlin_cfg is None:
-        dim = (cfg.size[0], cfg.size[1], 0.0)
-        pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.0)
-        ground_mesh = trimesh.creation.box(dim, trimesh.transformations.translation_matrix(pos))
-        mesh_list.append(ground_mesh)
-    else:
-        clean_ground_height_field = np.zeros(
-            (int(cfg.size[0] / cfg.horizontal_scale) + 1, int(cfg.size[1] / cfg.horizontal_scale) + 1), dtype=np.int16
+        ground_geom = make_plane(body, cfg.size, 0.0, center_zero=False)[0]
+        geometries.append(TerrainGeometry(geom=ground_geom))
+        surface_meshes.append(
+            trimesh.creation.box(
+                extents=(width, length, 1.0),
+                transform=trimesh.transformations.translation_matrix((0.5 * width, 0.5 * length, -0.5)),
+            )
         )
-        perlin_cfg = cfg.perlin_cfg
+    else:
+        perlin_cfg = copy.deepcopy(cfg.perlin_cfg)
         perlin_cfg.size = cfg.size
         perlin_cfg.horizontal_scale = cfg.horizontal_scale
         perlin_cfg.vertical_scale = cfg.vertical_scale
         perlin_cfg.slope_threshold = cfg.slope_threshold
-        perlin_noise = generate_perlin_noise(
-            difficulty,
-            perlin_cfg,  # type: ignore[arg-type]
-        )
-        h, w = perlin_noise.shape
-        ground_h, ground_w = clean_ground_height_field.shape
-        pad_h_left = max(0, (ground_h - h) // 2)
-        pad_h_right = max(0, ground_h - h - pad_h_left)
-        pad_w_left = max(0, (ground_w - w) // 2)
-        pad_w_right = max(0, ground_w - w - pad_w_left)
-        pad_width = ((pad_h_left, pad_h_right), (pad_w_left, pad_w_right))
-        perlin_noise = np.pad(perlin_noise, pad_width, mode="constant", constant_values=0)
-        ground_height_field = clean_ground_height_field + perlin_noise
-        # convert to trimesh
-        vertices, triangles = convert_height_field_to_mesh(
-            ground_height_field, cfg.horizontal_scale, cfg.vertical_scale, cfg.slope_threshold
-        )
-        ground_mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
-        mesh_list.append(ground_mesh)
-
-    if cfg.box_perlin_cfg is not None and cfg.no_perlin_at_obstacle is False:
-        box_perlin_cfg = cfg.box_perlin_cfg
-        box_perlin_cfg.horizontal_scale = (
-            cfg.horizontal_scale if box_perlin_cfg.horizontal_scale is None else box_perlin_cfg.horizontal_scale
-        )
-        box_perlin_cfg.vertical_scale = (
-            cfg.vertical_scale if box_perlin_cfg.vertical_scale is None else box_perlin_cfg.vertical_scale
-        )
-        box_perlin_cfg.slope_threshold = (
-            cfg.slope_threshold if box_perlin_cfg.slope_threshold is None else box_perlin_cfg.slope_threshold
-        )
+        perlin_cfg.flat_patch_sampling = None
+        perlin_cfg.wall_prob = [0.0, 0.0, 0.0, 0.0]
+        ground_output = perlin_cfg.function(difficulty, spec, rng)
+        geometries.extend(ground_output.geometries)
+        surface_meshes.append(ground_output.instinct_surface_mesh)
 
     platform_width = cfg.platform_width
-
-    for i in range(num_boxes):
-        box_width = box_width_mean + np.random.uniform(-1, 1) * box_width_range
-        box_length = box_length_mean + np.random.uniform(-1, 1) * box_length_range
-        box_height = box_height_mean + np.random.uniform(-1, 1) * box_height_range
-        dim = (box_width, box_length, box_height)
-        x = np.random.uniform(box_width / 2, width - box_width / 2)
-        y = np.random.uniform(box_length / 2, length - box_length / 2)
+    for _ in range(num_boxes):
+        box_width = box_width_mean + rng.uniform(-1.0, 1.0) * box_width_range
+        box_length = box_length_mean + rng.uniform(-1.0, 1.0) * box_length_range
+        box_height = box_height_mean + rng.uniform(-1.0, 1.0) * box_height_range
+        x = rng.uniform(box_width / 2.0, width - box_width / 2.0)
+        y = rng.uniform(box_length / 2.0, length - box_length / 2.0)
         if (
-            x > width / 2 - platform_width / 2 - box_width / 2 and x < width / 2 + platform_width / 2 + box_width / 2
+            width / 2.0 - platform_width / 2.0 - box_width / 2.0
+            < x
+            < width / 2.0 + platform_width / 2.0 + box_width / 2.0
         ) and (
-            y > length / 2 - platform_width / 2 - box_length / 2
-            and y < length / 2 + platform_width / 2 + box_length / 2
+            length / 2.0 - platform_width / 2.0 - box_length / 2.0
+            < y
+            < length / 2.0 + platform_width / 2.0 + box_length / 2.0
         ):
             continue
-        pos = (x, y, box_height / 2)
-        theta = np.random.uniform(0, 2 * np.pi)
-        translation_matrix = trimesh.transformations.translation_matrix(pos)
-        rotation_matrix = trimesh.transformations.rotation_matrix(theta, (0, 0, 1))
-        transform = translation_matrix @ rotation_matrix
-        box_mesh = trimesh.creation.box(extents=dim)
-        # top_z=box_mesh.vertices[:, 2].max()
-        # top_face_mask=np.all(box_mesh.vertices[box_mesh.faces][:,:,2] == top_z, axis=1)
-        # box_mesh.update_faces(~top_face_mask)
-        # box_mesh.remove_unreferenced_vertices()
-        box_mesh.apply_transform(transform)
-        mesh_list.append(box_mesh)
-        if cfg.box_perlin_cfg is not None and cfg.no_perlin_at_obstacle is False:
+
+        theta = rng.uniform(0.0, 2.0 * np.pi)
+        yaw_quat = (np.cos(theta / 2.0), 0.0, 0.0, np.sin(theta / 2.0))
+        box_geom = body.add_geom(
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=(box_width / 2.0, box_length / 2.0, box_height / 2.0),
+            pos=(x, y, box_height / 2.0),
+            quat=yaw_quat,
+        )
+        geometries.append(TerrainGeometry(geom=box_geom))
+
+        box_transform = (
+            trimesh.transformations.translation_matrix((x, y, box_height / 2.0))
+            @ trimesh.transformations.rotation_matrix(theta, (0.0, 0.0, 1.0))
+        )
+        surface_meshes.append(
+            trimesh.creation.box(extents=(box_width, box_length, box_height), transform=box_transform)
+        )
+
+        if cfg.box_perlin_cfg is not None and not cfg.no_perlin_at_obstacle:
+            box_perlin_cfg = copy.deepcopy(cfg.box_perlin_cfg)
             box_perlin_cfg.size = (box_width, box_length)
-            perlin_noise = generate_perlin_noise(
-                difficulty,
-                box_perlin_cfg,  # type: ignore[arg-type]
-            )
-            vertices, triangles = convert_height_field_to_mesh(
-                perlin_noise,
-                box_perlin_cfg.horizontal_scale,
-                box_perlin_cfg.vertical_scale,
-                box_perlin_cfg.slope_threshold,
-            )
-            box_noise = trimesh.Trimesh(vertices=vertices, faces=triangles)
-            center_offset = (-box_width / 2, -box_length / 2, 0)
-            center_translation = trimesh.transformations.translation_matrix(center_offset)
-            box_noise.apply_transform(center_translation)
-            noise_pos = (x, y, box_height)
-            translation_matrix = trimesh.transformations.translation_matrix(noise_pos)
-            transform = translation_matrix @ rotation_matrix
-            box_noise.apply_transform(transform)
-            mesh_list.append(box_noise)
+            if box_perlin_cfg.horizontal_scale is None:
+                box_perlin_cfg.horizontal_scale = cfg.horizontal_scale
+            if box_perlin_cfg.vertical_scale is None:
+                box_perlin_cfg.vertical_scale = cfg.vertical_scale
+            if box_perlin_cfg.slope_threshold is None:
+                box_perlin_cfg.slope_threshold = cfg.slope_threshold
+            box_perlin_cfg.flat_patch_sampling = None
+            box_perlin_cfg.wall_prob = [0.0, 0.0, 0.0, 0.0]
+            box_noise_output = box_perlin_cfg.function(difficulty, spec, rng)
 
-    origin = np.array([0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.0])
+            cos_theta = np.cos(theta)
+            sin_theta = np.sin(theta)
+            for terrain_geometry in box_noise_output.geometries:
+                geom = terrain_geometry.geom
+                if geom is not None:
+                    local_pos = np.asarray(geom.pos, dtype=np.float64)
+                    local_x = local_pos[0] - box_width / 2.0
+                    local_y = local_pos[1] - box_length / 2.0
+                    geom.pos = (
+                        x + cos_theta * local_x - sin_theta * local_y,
+                        y + sin_theta * local_x + cos_theta * local_y,
+                        box_height + local_pos[2],
+                    )
+                    geom.quat = yaw_quat
+                geometries.append(terrain_geometry)
 
-    return mesh_list, origin
+            box_noise_mesh = box_noise_output.instinct_surface_mesh.copy()
+            noise_transform = (
+                trimesh.transformations.translation_matrix((x, y, box_height))
+                @ trimesh.transformations.rotation_matrix(theta, (0.0, 0.0, 1.0))
+                @ trimesh.transformations.translation_matrix((-box_width / 2.0, -box_length / 2.0, 0.0))
+            )
+            box_noise_mesh.apply_transform(noise_transform)
+            surface_meshes.append(box_noise_mesh)
+
+    wall_specs = (
+        (
+            cfg.wall_prob[0],
+            (cfg.wall_thickness / 2.0, length / 2.0, cfg.wall_height / 2.0),
+            (-cfg.wall_thickness / 2.0, length / 2.0, cfg.wall_height / 2.0),
+        ),
+        (
+            cfg.wall_prob[1],
+            (cfg.wall_thickness / 2.0, length / 2.0, cfg.wall_height / 2.0),
+            (width + cfg.wall_thickness / 2.0, length / 2.0, cfg.wall_height / 2.0),
+        ),
+        (
+            cfg.wall_prob[2],
+            (width / 2.0, cfg.wall_thickness / 2.0, cfg.wall_height / 2.0),
+            (width / 2.0, -cfg.wall_thickness / 2.0, cfg.wall_height / 2.0),
+        ),
+        (
+            cfg.wall_prob[3],
+            (width / 2.0, cfg.wall_thickness / 2.0, cfg.wall_height / 2.0),
+            (width / 2.0, length + cfg.wall_thickness / 2.0, cfg.wall_height / 2.0),
+        ),
+    )
+    for probability, half_size, position in wall_specs:
+        if rng.uniform() < probability:
+            wall_geom = body.add_geom(
+                type=mujoco.mjtGeom.mjGEOM_BOX,
+                size=half_size,
+                pos=position,
+            )
+            geometries.append(TerrainGeometry(geom=wall_geom))
+            surface_meshes.append(
+                trimesh.creation.box(
+                    extents=tuple(2.0 * value for value in half_size),
+                    transform=trimesh.transformations.translation_matrix(position),
+                )
+            )
+
+    origin = np.array([0.5 * width, 0.5 * length, 0.0])
+    surface_mesh = trimesh.util.concatenate(surface_meshes)
+    flat_patches: dict[str, np.ndarray] | None = None
+    if cfg.flat_patch_sampling is not None:
+        from instinct_mj.terrains.terrain_generator import _find_flat_patches_on_surface_mesh
+
+        flat_patches = {}
+        for patch_name, patch_cfg in cfg.flat_patch_sampling.items():
+            patches_from_origin = _find_flat_patches_on_surface_mesh(
+                surface_mesh,
+                device="cpu",
+                num_patches=patch_cfg.num_patches,
+                patch_radius=patch_cfg.patch_radius,
+                origin=origin,
+                x_range=patch_cfg.x_range,
+                y_range=patch_cfg.y_range,
+                z_range=patch_cfg.z_range,
+                max_height_diff=patch_cfg.max_height_diff,
+            )
+            flat_patches[patch_name] = patches_from_origin + origin
+
+    output = TerrainOutput(origin=origin, geometries=geometries, flat_patches=flat_patches)
+    output.instinct_surface_mesh = surface_mesh
+    return output

@@ -6,16 +6,35 @@ chain, transforming GMR pickle files into retargetted npz files.
 
 from __future__ import annotations
 
-import argparse
 import functools
 import multiprocessing as mp
 import os
 import pickle as pkl
+from dataclasses import dataclass
 
+import mjlab
 import numpy as np
 import pytorch_kinematics as pk
 import torch
 import tqdm
+import tyro
+
+from instinct_mj.assets.unitree_g1 import G1_MJCF_PATH
+
+
+@dataclass(frozen=True)
+class GmrToInstinctConfig:
+    """Configuration for converting GMR data to Instinct motion format."""
+
+    src: str
+    """Input file or folder."""
+    tgt: str
+    """Target file or folder. Structure is preserved for folders."""
+    urdf: str = G1_MJCF_PATH
+    """Robot URDF/MJCF used to convert the base frame."""
+    src_frame: str = "pelvis"
+    tgt_frame: str = "torso_link"
+    num_cpus: int = 10
 
 
 def load_GMR_src_file(src_file):
@@ -123,33 +142,16 @@ def convert_file(
     )
 
 
-def main():
-    from instinct_mj.assets.unitree_g1 import G1_MJCF_PATH
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--src", type=str, help="Input file or folder")
-    parser.add_argument("--tgt", type=str, help="Target file or folder. Structure preserved if folder")
-    parser.add_argument(
-        "--urdf",
-        type=str,
-        default=G1_MJCF_PATH,
-        help="Robot urdf/mjcf to convert the base, does not need to match the source base or target base",
-    )
-    parser.add_argument("--src_frame", type=str, default="pelvis")
-    parser.add_argument("--tgt_frame", type=str, default="torso_link")
-    parser.add_argument("--num_cpus", default=10)
-
-    args = parser.parse_args()
-
+def run(cfg: GmrToInstinctConfig) -> None:
     # walk through the source folder and make folders in target folder if needed
     src_tgt_pairs = []
-    if os.path.isfile(args.src):
-        src_tgt_pairs.append((args.src, args.tgt))
+    if os.path.isfile(cfg.src):
+        src_tgt_pairs.append((cfg.src, cfg.tgt))
     else:
-        if not os.path.exists(args.tgt):
-            os.makedirs(args.tgt, exist_ok=True)
-        for root, _, filenames in os.walk(args.src):
-            target_dirpath = os.path.join(args.tgt, os.path.relpath(root, args.src))
+        if not os.path.exists(cfg.tgt):
+            os.makedirs(cfg.tgt, exist_ok=True)
+        for root, _, filenames in os.walk(cfg.src):
+            target_dirpath = os.path.join(cfg.tgt, os.path.relpath(root, cfg.src))
             os.makedirs(target_dirpath, exist_ok=True)
             for filename in filenames:
                 if not filename.endswith(".pkl"):
@@ -161,21 +163,25 @@ def main():
                     )
                 )
 
-    with mp.Pool(args.num_cpus) as pool:
+    with mp.Pool(cfg.num_cpus) as pool:
         results = list(
             tqdm.tqdm(
                 pool.imap_unordered(
                     functools.partial(
                         convert_file,
-                        urdf=args.urdf,
-                        src_frame_name=args.src_frame,
-                        tgt_frame_name=args.tgt_frame,
+                        urdf=cfg.urdf,
+                        src_frame_name=cfg.src_frame,
+                        tgt_frame_name=cfg.tgt_frame,
                     ),
                     src_tgt_pairs,
                 ),
                 total=len(src_tgt_pairs),
             )
         )
+
+
+def main() -> None:
+    run(tyro.cli(GmrToInstinctConfig, config=mjlab.TYRO_FLAGS))
 
 
 if __name__ == "__main__":

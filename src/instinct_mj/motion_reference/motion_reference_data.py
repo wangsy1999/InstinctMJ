@@ -370,6 +370,7 @@ class MotionReferenceData:
         num_joints: int,
         num_links: int,
         device=torch.device("cpu"),
+        **kwargs,
     ) -> MotionReferenceData:
         return_ = MotionReferenceData(
             joint_pos=torch.zeros(num_envs, num_frames, num_joints, device=device),
@@ -457,6 +458,7 @@ class MotionReferenceState:
         num_envs: int,
         num_joints: int,
         device=torch.device("cpu"),
+        **kwargs,
     ) -> MotionReferenceState:
         return_ = MotionReferenceState(
             joint_pos=torch.zeros(num_envs, num_joints, device=device),

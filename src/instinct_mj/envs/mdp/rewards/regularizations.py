@@ -95,7 +95,7 @@ def _body_lin_acc_w(
     """Compute body linear acceleration from step-to-step link linear velocity."""
     body_link_lin_vel_w = asset.data.body_link_lin_vel_w
     cache_key = asset_cfg.name
-    cache = env._instinct_body_lin_acc_cache
+    cache = env.body_lin_acc_cache
     if cache_key not in cache:
         cache[cache_key] = {
             "sim_step": -1,
@@ -104,7 +104,7 @@ def _body_lin_acc_w(
         }
 
     cache_entry = cache[cache_key]
-    sim_step = env._sim_step_counter
+    sim_step = env.common_step_counter
     if cache_entry["sim_step"] != sim_step:
         body_link_lin_acc_w = (body_link_lin_vel_w - cache_entry["vel"]) / env.step_dt
         body_link_lin_acc_w[env.episode_length_buf <= 1] = 0.0

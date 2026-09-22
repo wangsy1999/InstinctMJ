@@ -77,6 +77,7 @@ class TerrainImporter(TerrainImporterBase):
         self.device = device
         self._device = device
         self._spec = mujoco.MjSpec()
+        self._variant_metadata = None
         self.env_origins = None
         self.terrain_origins = None
         self.terrain_generator = None
@@ -723,10 +724,7 @@ class TerrainImporter(TerrainImporterBase):
         if self.terrain_generator is None:
             return
         if isinstance(self.terrain_generator, FiledTerrainGenerator):
-            self.terrain_generator.terrain_mesh = None
-            terrain_meshes = self.terrain_generator._terrain_meshes
-            if isinstance(terrain_meshes, list):
-                terrain_meshes.clear()
+            self.terrain_generator.release_terrain_mesh_cache()
 
     def _apply_collision_debug_visual_style(self) -> None:
         """Tint terrain collision geoms so they are visible in the viewer."""

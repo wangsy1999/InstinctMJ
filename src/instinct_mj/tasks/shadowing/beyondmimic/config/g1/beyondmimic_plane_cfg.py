@@ -16,7 +16,7 @@ from mjlab.managers import (
 )
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.terrains import TerrainEntityCfg
+from instinct_mj.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import CollisionCfg
 from mjlab.viewer.viewer_config import ViewerConfig
@@ -24,6 +24,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 import instinct_mj.envs.mdp as instinct_mdp
 import instinct_mj.tasks.shadowing.beyondmimic.beyondmimic_env_cfg as beyondmimic_cfg
 from instinct_mj.assets.unitree_g1 import G1_29DOF_TORSOBASE_POPSICLE_CFG, G1_MJCF_PATH, beyondmimic_action_scale
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     ActuatorMonitorTerm,
     MonitorTermCfg,
@@ -517,6 +518,8 @@ def g1_beyondmimic_plane_env_cfg(*, play: bool = False) -> beyondmimic_cfg.Beyon
                 geom_names_expr=(".*",),
                 contype=0,
                 conaffinity=0,
+                condim=3,
+                priority=0,
             ),
         )
         entities = {
@@ -580,7 +583,7 @@ def g1_beyondmimic_plane_env_cfg(*, play: bool = False) -> beyondmimic_cfg.Beyon
         actions=_actions_cfg(),
         observations=_observations_cfg(link_of_interests=list(active_motion_reference_cfg.link_of_interests)),
         commands=_commands_cfg(),
-        rewards={"rewards": deepcopy(beyondmimic_cfg.make_beyondmimic_rewards())},
+        rewards=MultiRewardCfg({"rewards": deepcopy(beyondmimic_cfg.make_beyondmimic_rewards())}),
         events=_events_cfg(),
         curriculum=_curriculum_cfg(),
         terminations=_terminations_cfg(),

@@ -11,13 +11,22 @@ from mjlab.managers import RewardTermCfg as RewTermCfg
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg
-from mjlab.sensor import ContactMatch, GridPatternCfg, ObjRef, PinholeCameraPatternCfg, RayCastSensorCfg, SensorCfg
+from mjlab.sensor import (
+    ContactMatch,
+    ContactSensorCfg,
+    GridPatternCfg,
+    ObjRef,
+    PinholeCameraPatternCfg,
+    RayCastSensorCfg,
+    SensorCfg,
+)
 from mjlab.terrains import FlatPatchSamplingCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.envs.manager_based_rl_env_cfg import InstinctLabRLEnvCfg
+from instinct_mj.envs.manager_based_rl_env_cfg import InstinctRlEnvCfg
+from instinct_mj.managers import MultiRewardCfg
 from instinct_mj.monitors import (
     MonitorTermCfg,
     MotionReferenceMonitorTerm,
@@ -28,7 +37,6 @@ from instinct_mj.monitors import (
     ShadowingRotationMonitorTerm,
 )
 from instinct_mj.motion_reference.motion_reference_cfg import MotionReferenceManagerCfg
-from instinct_mj.sensors.contact_sensor import ForceThresholdContactSensorCfg
 from instinct_mj.sensors.grouped_ray_caster import GroupedRayCasterCameraCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
 from instinct_mj.tasks.shadowing import mdp as shadowing_mdp
@@ -47,6 +55,7 @@ from instinct_mj.utils.noise import (
 )
 
 # PROPRIO_HISTORY_LENGTH = 0
+PROPRIO_HISTORY_LENGTH = 8
 
 
 def _edit_perceptive_scene_spec(spec: mujoco.MjSpec) -> None:
@@ -207,15 +216,14 @@ class PerceptiveShadowingSceneCfg(SceneCfg):
     # sensors
     sensors: tuple[SensorCfg, ...] = field(
         default_factory=lambda: (
-            ForceThresholdContactSensorCfg(
+            ContactSensorCfg(
                 name="contact_forces",
                 primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
                 secondary=None,
-                fields=("force",),
+                fields=("found", "force"),
                 reduce="netforce",
                 history_length=3,
                 track_air_time=True,
-                force_threshold=1.0,
             ),
             RayCastSensorCfg(
                 name="height_scanner",
@@ -295,15 +303,14 @@ def make_perceptive_scene_sensors(
     """Build perceptive scene sensors without bridge fields."""
     # lights are applied in _edit_perceptive_scene_spec.
     sensor_list: list[SensorCfg] = [
-        ForceThresholdContactSensorCfg(
+        ContactSensorCfg(
             name="contact_forces",
             primary=ContactMatch(mode="body", pattern=".*", entity="robot"),
             secondary=None,
-            fields=("force",),
+            fields=("found", "force"),
             reduce="netforce",
             history_length=3,
             track_air_time=True,
-            force_threshold=1.0,
         )
     ]
     if include_height_scanner:
@@ -467,13 +474,13 @@ def make_observations() -> dict[str, ObsGroupCfg]:
         "projected_gravity": ObsTermCfg(
             func=mdp.projected_gravity,
             noise=UniformNoiseCfg(n_min=-0.05, n_max=0.05),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         # base_lin_vel = ObsTermCfg(func=mdp.base_lin_vel)
         "base_ang_vel": ObsTermCfg(
             func=mdp.base_ang_vel,
             noise=UniformNoiseCfg(n_min=-0.2, n_max=0.2),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_pos": ObsTermCfg(
             func=mdp.joint_pos_rel,
@@ -481,7 +488,7 @@ def make_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.01, n_max=0.01),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_vel": ObsTermCfg(
             func=mdp.joint_vel_rel,
@@ -489,11 +496,11 @@ def make_observations() -> dict[str, ObsGroupCfg]:
                 "asset_cfg": SceneEntityCfg("robot"),
             },
             noise=UniformNoiseCfg(n_min=-0.5, n_max=0.5),
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "last_action": ObsTermCfg(
             func=mdp.last_action,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
     }
 
@@ -519,29 +526,29 @@ def make_observations() -> dict[str, ObsGroupCfg]:
         ),
         "base_lin_vel": ObsTermCfg(
             func=mdp.base_lin_vel,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "base_ang_vel": ObsTermCfg(
             func=mdp.base_ang_vel,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_pos": ObsTermCfg(
             func=mdp.joint_pos_rel,
             params={
                 "asset_cfg": SceneEntityCfg("robot"),
             },
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "joint_vel": ObsTermCfg(
             func=mdp.joint_vel_rel,
             params={
                 "asset_cfg": SceneEntityCfg("robot"),
             },
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
         "last_action": ObsTermCfg(
             func=mdp.last_action,
-            history_length=8,
+            history_length=PROPRIO_HISTORY_LENGTH,
         ),
     }
 
@@ -947,13 +954,13 @@ def make_monitors() -> dict[str, MonitorTermCfg]:
 
 
 @dataclass(kw_only=True)
-class PerceptiveShadowingEnvCfg(InstinctLabRLEnvCfg):
+class PerceptiveShadowingEnvCfg(InstinctRlEnvCfg):
     scene: PerceptiveShadowingSceneCfg = field(default_factory=lambda: PerceptiveShadowingSceneCfg())
     decimation: int = 4
     commands: dict = field(default_factory=make_perceptive_commands)
     actions: dict = field(default_factory=make_actions)
     observations: dict = field(default_factory=make_observations)
-    rewards: dict = field(default_factory=lambda: {"rewards": make_rewards()})
+    rewards: dict = field(default_factory=lambda: MultiRewardCfg({"rewards": make_rewards()}))
     events: dict = field(default_factory=make_events)
     curriculum: dict = field(default_factory=make_curriculum)
     terminations: dict = field(default_factory=make_terminations)

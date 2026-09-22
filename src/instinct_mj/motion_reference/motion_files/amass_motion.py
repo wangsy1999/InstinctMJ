@@ -74,10 +74,10 @@ def sample_start_times(
     num_assign = len(motion_ids)
     temp_starts = torch.empty(num_assign, dtype=torch.float32, device=buffer_device)
 
-    global_cum = torch.cumsum(motion_bin_weights._concatenated_tensor, dim=0)
-    prev_ends = motion_bin_weights._batch_starts[1:] - 1
+    global_cum = torch.cumsum(motion_bin_weights.concatenated_tensor, dim=0)
+    prev_ends = motion_bin_weights.batch_starts[1:] - 1
     segment_offsets_values = torch.cat([torch.tensor([0.0], device=global_cum.device), global_cum[prev_ends]])
-    segment_lengths = motion_bin_weights._batch_sizes
+    segment_lengths = motion_bin_weights.batch_sizes
     offsets = torch.repeat_interleave(segment_offsets_values, segment_lengths)
     flat_cdf = global_cum - offsets
 
@@ -86,8 +86,8 @@ def sample_start_times(
         dim=num_assign,
         inputs=[
             wp.from_torch(motion_ids.to(torch.int32), dtype=wp.int32),  # type: ignore
-            wp.from_torch(motion_bin_weights._batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
-            wp.from_torch(motion_bin_weights._batch_sizes.to(torch.int32), dtype=wp.int32),  # type: ignore
+            wp.from_torch(motion_bin_weights.batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
+            wp.from_torch(motion_bin_weights.batch_sizes.to(torch.int32), dtype=wp.int32),  # type: ignore
             wp.from_torch(flat_cdf, dtype=wp.float32),  # type: ignore
             wp.from_torch(temp_starts, dtype=wp.float32),
             motion_bin_length_s,
@@ -155,6 +155,21 @@ class AmassMotion(MotionBuffer):
             )
             - self._motion_buffer_start_time_s
         ).to(self.output_device)
+
+    @property
+    def motion_bin_weights(self) -> ConcatBatchTensor:
+        """Get the per-motion temporal-bin sampling weights."""
+        return self._motion_bin_weights
+
+    @property
+    def assigned_env_motion_selection(self) -> torch.Tensor:
+        """Get the motion selected for each assigned environment."""
+        return self._assigned_env_motion_selection
+
+    @property
+    def motion_buffer_start_time_s(self) -> torch.Tensor:
+        """Get the sampled start time for each assigned environment."""
+        return self._motion_buffer_start_time_s
 
     """
     Operations.
@@ -888,7 +903,7 @@ class AmassMotion(MotionBuffer):
     def _sample_as_concat_motion_bins(self, assigned_ids: Sequence[int] | torch.Tensor) -> None:
         """Sample the motion file id and start time for the assigned envs as if all motions are concatenated into a single motion."""
         flattened_bin_ids = torch.multinomial(
-            self._motion_bin_weights._concatenated_tensor,
+            self._motion_bin_weights.concatenated_tensor,
             len(assigned_ids),
             replacement=True,
         ).to(self.buffer_device)

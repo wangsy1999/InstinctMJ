@@ -252,21 +252,22 @@ class ShadowingCommandBase(CommandTerm):
         """Does not depend on the command term. self._command always depend on motion reference."""
         pass
 
-    def _update_command(self):
+    def _update_command(self, env_ids: torch.Tensor | None = None):
         """Update the command based on the motion reference and time."""
         self._motion_reference.data  # trigger the update of the motion reference data
 
         # update the real-time mode for the position
-        if self.cfg.realtime_mode:
-            env_ids = self._motion_reference.ALL_INDICES
-        else:
-            env_ids = self._motion_reference_updated_env_ids
+        if env_ids is None:
+            if self.cfg.realtime_mode:
+                env_ids = self._motion_reference.ALL_INDICES
+            else:
+                env_ids = self._motion_reference_updated_env_ids
         if len(env_ids) > 0:
             self._update_command_by_env_ids(env_ids)
 
     def reset(self, env_ids: Sequence[int] | None = None):
         """Reset the command term for the given environment indices."""
-        self._update_command_by_env_ids(env_ids)
+        self._update_command(env_ids)
         return {}  # no metrics to return, override if needed.
 
     def _update_command_by_env_ids(self, env_ids: Sequence[int] | torch.Tensor):
@@ -354,21 +355,28 @@ class PoseRefCommand(ShadowingCommandBase):
             return torch.cat([mask, self._current_state_mask], dim=1)
         return mask
 
-    def _update_command(self):
+    def _update_command(self, env_ids: torch.Tensor | None = None):
         """Update the command based on the motion reference and time."""
         self._motion_reference.data  # trigger the update of the motion reference data
 
         # update the real-time mode for the position
-        if self.cfg.realtime_mode == 1:
-            env_ids = self._motion_reference.ALL_INDICES
-        else:
-            env_ids = self._motion_reference_updated_env_ids
+        scoped_update = env_ids is not None
+        if env_ids is None:
+            if self.cfg.realtime_mode == 1:
+                env_ids = self._motion_reference.ALL_INDICES
+            else:
+                env_ids = self._motion_reference_updated_env_ids
         if len(env_ids) > 0:
-            self._update_command_by_env_ids(env_ids)
+            self._update_command_by_env_ids(env_ids, update_all_rotations=not scoped_update)
         if self._visualizer is not None:
             self._compute_debug_vis_data()
 
-    def _update_command_by_env_ids(self, env_ids: Sequence[int] | torch.Tensor):
+    def _update_command_by_env_ids(
+        self,
+        env_ids: Sequence[int] | torch.Tensor,
+        *,
+        update_all_rotations: bool = True,
+    ):
         if self.cfg.anchor_frame == "robot":
             anchor_pos_w_inv, anchor_quat_w_inv = math_utils.subtract_frame_transforms(
                 self._env.scene[self.cfg.asset_cfg.name].data.root_link_pos_w[env_ids],
@@ -386,7 +394,7 @@ class PoseRefCommand(ShadowingCommandBase):
         )
 
         # update the real-time mode for the rotation
-        if self.cfg.realtime_mode == -1:
+        if self.cfg.realtime_mode == -1 and update_all_rotations:
             env_ids = self._motion_reference.ALL_INDICES
         base_quat_b = math_utils.quat_mul(
             anchor_quat_w_inv.unsqueeze(1).expand(-1, self._motion_reference.num_frames, -1),

@@ -42,7 +42,7 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
         self.motion_buffer: AmassMotion = self.motion_reference.motion_buffers[self.motion_buffer_name]  # type: ignore
         self.__motion_bin_length_s = self.motion_buffer.cfg.motion_bin_length_s
 
-        if self.__motion_bin_length_s is None or not hasattr(self.motion_buffer, "_motion_bin_weights"):
+        if self.__motion_bin_length_s is None or not hasattr(self.motion_buffer, "motion_bin_weights"):
             self.enabled = False
             self.motion_bin_nums = None
             self.motion_bin_fail_counter = None
@@ -50,7 +50,7 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
             self.kernel = None
             return
 
-        self.motion_bin_nums = self.motion_buffer._motion_bin_weights._batch_sizes
+        self.motion_bin_nums = self.motion_buffer.motion_bin_weights.batch_sizes
         self.motion_bin_fail_counter = ConcatBatchTensor(
             batch_sizes=self.motion_bin_nums,  # type: ignore
             data_shape=tuple(),
@@ -114,14 +114,14 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
         repeat_sums = torch.repeat_interleave(motion_sums, self.motion_bin_nums)
         new_prob_concat /= repeat_sums.clamp(min=1e-10)  # Avoid division by zero
 
-        self.motion_buffer._motion_bin_weights._concatenated_tensor.copy_(new_prob_concat)
+        self.motion_buffer.motion_bin_weights.concatenated_tensor.copy_(new_prob_concat)
 
         # Metrics to log
         sampling_entropy = []
         sampling_top1_probs = []
         sampling_top1_bins = []
         for motion_idx in range(min(self.motion_bin_nums.shape[0], 4)):
-            w = self.motion_buffer._motion_bin_weights[motion_idx]
+            w = self.motion_buffer.motion_bin_weights[motion_idx]
             sampling_entropy.append(
                 -torch.sum(w * torch.log(w + 1e-12)).item() / self.motion_bin_nums[motion_idx].log().item()
             )
@@ -143,18 +143,18 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
             current_bin_idx = torch.clamp(
                 (
                     self._env.episode_length_buf[env_ids] * self._env.step_dt
-                    + self.motion_buffer._motion_buffer_start_time_s[env_ids]
+                    + self.motion_buffer.motion_buffer_start_time_s[env_ids]
                 )
                 / self.__motion_bin_length_s,
-                max=self.motion_bin_nums[self.motion_buffer._assigned_env_motion_selection[env_ids]] - 1,
+                max=self.motion_bin_nums[self.motion_buffer.assigned_env_motion_selection[env_ids]] - 1,
             ).to(torch.long)
             failed_bin_idx = current_bin_idx[episode_failed].to(torch.long)
-            failed_motion_ids = self.motion_buffer._assigned_env_motion_selection[env_ids][episode_failed]
+            failed_motion_ids = self.motion_buffer.assigned_env_motion_selection[env_ids][episode_failed]
         else:
             failed_bin_idx = torch.tensor([], device=self.motion_buffer.buffer_device, dtype=torch.int)
             failed_motion_ids = torch.tensor([], device=self.motion_buffer.buffer_device, dtype=torch.int)
 
-        self.current_motion_bin_fail_counter._concatenated_tensor.fill_(0)
+        self.current_motion_bin_fail_counter.concatenated_tensor.fill_(0)
 
         # Update the current motion bin fail counter
         if episode_failed.any():
@@ -164,8 +164,8 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
                 inputs=[
                     wp.from_torch(failed_motion_ids.to(torch.int32), dtype=wp.int32),  # type: ignore
                     wp.from_torch(failed_bin_idx.to(torch.int32), dtype=wp.int32),  # type: ignore
-                    wp.from_torch(self.current_motion_bin_fail_counter._batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
-                    wp.from_torch(self.current_motion_bin_fail_counter._concatenated_tensor, dtype=wp.float32),  # type: ignore
+                    wp.from_torch(self.current_motion_bin_fail_counter.batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
+                    wp.from_torch(self.current_motion_bin_fail_counter.concatenated_tensor, dtype=wp.float32),  # type: ignore
                 ],
                 device=self.device,
             )
@@ -176,7 +176,7 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
 
         uniforms = self.adaptive_uniform_ratio / self.motion_bin_nums.float()
         uniform_per_bin = torch.repeat_interleave(uniforms, self.motion_bin_nums)
-        probability_concat = self.motion_bin_fail_counter._concatenated_tensor + uniform_per_bin
+        probability_concat = self.motion_bin_fail_counter.concatenated_tensor + uniform_per_bin
 
         new_prob_concat = torch.empty_like(probability_concat)
 
@@ -188,7 +188,7 @@ class BeyondMimicAdaptiveWeighting(ManagerTermBase):
             kernel=compute_smoothed_probs,
             dim=total_bins,
             inputs=[
-                wp.from_torch(self.motion_bin_fail_counter._batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
+                wp.from_torch(self.motion_bin_fail_counter.batch_starts.to(torch.int32), dtype=wp.int32),  # type: ignore
                 wp.from_torch(self.motion_bin_nums.to(torch.int32), dtype=wp.int32),  # type: ignore
                 wp.from_torch(motion_id_per_bin, dtype=wp.int32),  # type: ignore
                 wp.from_torch(self.kernel, dtype=wp.float32),  # type: ignore
@@ -226,10 +226,10 @@ class BeyondConcatMotionAdaptiveWeighting(BeyondMimicAdaptiveWeighting):
 
         # normalize the probability directly as if they are from a single motion file
         new_prob_concat /= new_prob_concat.sum()
-        self.motion_buffer._motion_bin_weights._concatenated_tensor.copy_(new_prob_concat)
+        self.motion_buffer.motion_bin_weights.concatenated_tensor.copy_(new_prob_concat)
 
         # compute the sampling stats, as if they are from a single motion file
-        w = self.motion_buffer._motion_bin_weights._concatenated_tensor
+        w = self.motion_buffer.motion_bin_weights.concatenated_tensor
         N = self.motion_bin_nums.sum()
         assert N == w.shape[0], "N should be the same as the number of bins"
         sampling_entropy = -torch.sum(w * torch.log(w + 1e-12)).item() / N.log().item()

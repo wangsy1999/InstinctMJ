@@ -4,29 +4,13 @@ from collections.abc import Sequence
 
 import torch
 from mjlab.envs import ManagerBasedRlEnv
-from mjlab.managers import (
-    ActionManager,
-    CommandManager,
-    CurriculumManager,
-    EventManager,
-    MetricsManager,
-    NullCommandManager,
-    NullCurriculumManager,
-    NullMetricsManager,
-    NullRecorderManager,
-    ObservationManager,
-    RecorderManager,
-    TerminationManager,
-)
 from mjlab.sim import Simulation
 from mjlab.utils.logging import print_info
 from mjlab.viewer.debug_visualizer import DebugVisualizer
 from mjlab.viewer.offscreen_renderer import OffscreenRenderer
 from prettytable import PrettyTable
 
-from instinct_mj.envs.scene import InstinctScene
-from instinct_mj.managers import MultiRewardManager
-from instinct_mj.monitors import MonitorManager
+from instinct_mj.managers import MultiRewardCfg
 
 
 class InstinctRlEnv(ManagerBasedRlEnv):
@@ -52,14 +36,17 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         # Initialize the manual-reset state here because InstinctRlEnv
         # customizes scene construction instead of calling ManagerBasedRlEnv.__init__.
         self._manual_reset_pending = torch.zeros(self.cfg.scene.num_envs, dtype=torch.bool, device=device)
+        # Scratch buffer for per-env command dt; see ManagerBasedRlEnv.step().
+        self._command_dt = torch.zeros(self.cfg.scene.num_envs, device=device)
 
         # Use InstinctScene so terrain cfg.class_type is honored (e.g. hacked_generator importer).
-        self.scene = InstinctScene(self.cfg.scene, device=device)
+        self.scene = self.cfg.scene_class_type(self.cfg.scene, device=device)
         self.sim = Simulation(
             num_envs=self.scene.num_envs,
             cfg=self.cfg.sim,
-            model=self.scene.compile(),
             device=device,
+            spec=self.scene.spec,
+            variant_info=self.scene.collect_variant_info(),
         )
 
         self.scene.initialize(
@@ -89,7 +76,13 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         self.render_mode = render_mode
         self._offline_renderer: OffscreenRenderer | None = None
         if self.render_mode == "rgb_array":
-            renderer = OffscreenRenderer(model=self.sim.mj_model, cfg=self.cfg.viewer, scene=self.scene)
+            renderer = OffscreenRenderer(
+                model=self.sim.mj_model,
+                cfg=self.cfg.viewer,
+                scene=self.scene,
+                sim_model=self.sim.model,
+                expanded_fields=self.sim.expanded_fields,
+            )
             renderer.initialize()
             self._offline_renderer = renderer
         self.metadata["render_fps"] = 1.0 / self.step_dt
@@ -98,56 +91,23 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         self.setup_manager_visualizers()
 
     def load_managers(self) -> None:
-        """Load managers in mjlab order with InstinctLab multi-reward logging."""
-        # Event manager (required before everything else for domain randomization).
-        self.event_manager = EventManager(self.cfg.events, self)
-        print_info(f"[INFO] {self.event_manager}")
+        """Extend mjlab manager loading with InstinctLab multi-reward routing."""
+        if isinstance(self.cfg.rewards, MultiRewardCfg):
+            reward_group_cfg = self.cfg.rewards
+            self.cfg.rewards = {}
 
-        self.sim.expand_model_fields(self.event_manager.domain_randomization_fields)
+        super().load_managers()
 
-        # Command manager must precede observations since observations may use commands.
-        if len(self.cfg.commands) > 0:
-            self.command_manager = CommandManager(self.cfg.commands, self)
-        else:
-            self.command_manager = NullCommandManager()
-        print_info(f"[INFO] {self.command_manager}")
+        if "reward_group_cfg" in locals():
+            self.cfg.rewards = reward_group_cfg
+            self.reward_manager = self.cfg.multi_reward_manager_class_type(
+                self.cfg.rewards,
+                self,
+                scale_by_dt=self.cfg.scale_rewards_by_dt,
+            )
+            print_info(f"[INFO] {self.reward_manager}")
 
-        self.action_manager = ActionManager(self.cfg.actions, self)
-        print_info(f"[INFO] {self.action_manager}")
-        self.observation_manager = ObservationManager(self.cfg.observations, self)
-        print_info(f"[INFO] {self.observation_manager}")
-
-        self.termination_manager = TerminationManager(self.cfg.terminations, self)
-        print_info(f"[INFO] {self.termination_manager}")
-        self.reward_manager = MultiRewardManager(
-            self.cfg.rewards,
-            self,
-            scale_by_dt=self.cfg.scale_rewards_by_dt,
-        )
-        print_info(f"[INFO] {self.reward_manager}")
-        if len(self.cfg.curriculum) > 0:
-            self.curriculum_manager = CurriculumManager(self.cfg.curriculum, self)
-        else:
-            self.curriculum_manager = NullCurriculumManager()
-        print_info(f"[INFO] {self.curriculum_manager}")
-        if len(self.cfg.metrics) > 0:
-            self.metrics_manager = MetricsManager(self.cfg.metrics, self)
-        else:
-            self.metrics_manager = NullMetricsManager()
-        print_info(f"[INFO] {self.metrics_manager}")
-        if len(self.cfg.recorders) > 0:
-            self.recorder_manager = RecorderManager(self.cfg.recorders, self)
-        else:
-            self.recorder_manager = NullRecorderManager()
-        print_info(f"[INFO] {self.recorder_manager}")
-
-        self._configure_gym_env_spaces()
-
-        # Initialize startup events if defined.
-        if "startup" in self.event_manager.available_modes:
-            self.event_manager.apply(mode="startup")
-
-        self.monitor_manager = MonitorManager(self.cfg.monitors, self)
+        self.monitor_manager = self.cfg.monitor_manager_class_type(self.cfg.monitors, self)
         print_info(f"[INFO] Monitor Manager: {self.monitor_manager}")
 
     def setup_manager_visualizers(self) -> None:
@@ -187,3 +147,8 @@ class InstinctRlEnv(ManagerBasedRlEnv):
     @property
     def num_rewards(self) -> int:
         return getattr(self.reward_manager, "num_rewards", 1)
+
+    @property
+    def body_lin_acc_cache(self) -> dict[str, dict[str, object]]:
+        """Get the per-entity body linear acceleration cache."""
+        return self._instinct_body_lin_acc_cache
